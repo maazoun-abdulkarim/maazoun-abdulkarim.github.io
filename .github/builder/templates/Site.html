@@ -324,9 +324,9 @@ function applyProfile(){
   $$("[data-privacy]").forEach(a => a.href = D.links ? D.links.privacy : D.base + "?p=privacy&m=" + encodeURIComponent(SLUG));
   $$("[data-panel]").forEach(a => a.href = D.links ? D.links.panel : D.base + "?p=panel");
   applyLogo(M.logoUrl);
-  if (D.district){
+  if (D.district || D.cityHome){
     $("#distHead").classList.remove("hidden");
-    $("#distHead span").textContent = "مأذون أنكحة في حي " + D.district.name + " – " + D.district.city;
+    $("#distHead span").textContent = D.district ? "مأذون أنكحة في حي " + D.district.name + " – " + D.district.city : "مأذون أنكحة في " + D.cityHome;
   }
 }
 
@@ -704,7 +704,7 @@ async function loadLive(tries){
     $("#calRetry").onclick = () => { note.textContent = "جاري تحميل المواعيد المتاحة…"; loadLive(0); };
     return;
   }
-  const s = r.site, keys = ["questions", "faq", "reqs", "reviews", "districts", "district", "set"];
+  const s = r.site, keys = ["questions", "faq", "reqs", "reviews", "districts", "district", "set", "cityHome"];
   const changed = JSON.stringify(keys.map(k => D[k])) !== JSON.stringify(keys.map(k => s[k])) || JSON.stringify(M) !== JSON.stringify(s.m);
   AV = unwire(s.avail); MONTHS = [];
   if (changed){ Object.assign(M, s.m); keys.forEach(k => { D[k] = s[k]; }); applyProfile(); renderQuestions(); setupDistrict(); renderPublic(); }

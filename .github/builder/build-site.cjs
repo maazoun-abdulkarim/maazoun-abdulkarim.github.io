@@ -192,18 +192,24 @@ function build(sitemap, conf, opts) {
     const page = (p, boot, title, desc, ogLine1, area) => {
       const img = conf.base + ogImage(ogHtml(m, ogLine1, m.shortName + ' · ' + m.title), ogName(p), opts);
       const html = render('Site', Object.assign({}, D, boot, { avail: null, base: conf.api, links: Object.assign({ self: url(p) }, links) }), m.colors);
-      write(fileOf(p), inject(html, head({ title, desc, url: url(p), image: img, siteName: m.shortName + ' – ' + m.title, color: m.colors.deep,
-        ld: business(url(p), area, img), api: conf.api })));
+      const full = inject(html, head({ title, desc, url: url(p), image: img, siteName: m.shortName + ' – ' + m.title, color: m.colors.deep,
+        ld: business(url(p), area, img), api: conf.api }));
+      write(fileOf(p), full);
+      // صفحة لها صفحات تحتها (مثل /jeddah و/jeddah/rawdah): نسخة index أيضاً حتى يفتحها GitHub بالشكلين
+      if (p && (s.districts.some(d => d.path.startsWith(p + '/')) || s.privacyPath.startsWith(p + '/'))) write(p + '/index.html', full);
       pages.push({ path: p, title });
     };
 
     // الصفحة الرئيسية للمأذون
-    page(s.path, { district: null, districts: [] }, m.shortName + ' | ' + m.title + ' في ' + m.city,
+    // صفحة المدينة الرئيسية (مثل /jeddah) عنوانها باسم المدينة
+    const ch = s.cityHome;
+    page(s.path, { district: null, districts: [], cityHome: ch },
+      ch ? 'مأذون أنكحة في ' + ch + ' – ' + m.shortName : m.shortName + ' | ' + m.title + ' في ' + m.city,
       m.shortName + '، ' + m.title + ' في ' + m.city + (m.tagline ? ' – ' + m.tagline : '') + '. احجز موعد عقد النكاح بسهولة: اختر اليوم والموعد بعد الصلاة.' + lic,
-      m.title + ' في ' + m.city, m.city);
-    // أول مأذون على الصفحة الأولى، ورمز رابطه يحوّل إليها
-    if (s.path === '' && s.slug) write(s.slug + '.html', '<!doctype html><meta charset="utf-8"><title>' + escA(m.shortName) + '</title><link rel="canonical" href="' + escA(url('')) +
-      '"><meta http-equiv="refresh" content="0;url=' + escA(url('')) + '"><a href="' + escA(url('')) + '">' + escA(m.shortName) + '</a>');
+      ch ? 'مأذون أنكحة في ' + ch : m.title + ' في ' + m.city, m.city);
+    // رمز رابط المأذون يحوّل إلى صفحته (الصفحة الأولى أو صفحة مدينته)
+    if (s.slug && s.path !== s.slug.toLowerCase()) write(s.slug.toLowerCase() + '.html', '<!doctype html><meta charset="utf-8"><title>' + escA(m.shortName) + '</title><link rel="canonical" href="' + escA(url(s.path)) +
+      '"><meta http-equiv="refresh" content="0;url=' + escA(url(s.path)) + '"><a href="' + escA(url(s.path)) + '">' + escA(m.shortName) + '</a>');
 
     // صفحة لكل حي
     s.districts.forEach(d => {

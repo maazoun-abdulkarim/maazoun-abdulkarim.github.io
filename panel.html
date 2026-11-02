@@ -748,6 +748,7 @@ function formFor(k, r, customize){
   let f = "";
   if (k === "dist") f = '<div class="row"><label>اسم الحي<input class="input" data-f="name" maxlength="40" value="' + v("name") + '"></label><label>الاسم اللاتيني للرابط <small>(مثل al-shoran)</small><input class="input" data-f="slug" dir="ltr" maxlength="40" value="' + v("slug") + '"></label></div>' +
     '<div class="row"><label>المدينة<select class="input" data-f="city">' + S.cities.map(c => opt(c.name, r.city || (mz(MID) || {}).city)).join("") + "</select></label>" + order + "</div>" +
+    (S.me.owner && S.maazoons.length > 1 ? '<label>مأذون هذا الحي <small>(الحجز والتنبيه يذهبان له)</small><select class="input" data-f="maazoonId">' + S.maazoons.map(m => opt(m.id, r.maazoonId || MID, (m.shortName || m.name) + " — " + m.city)).join("") + "</select></label>" : "") +
     '<p class="hint" style="margin:0">عنوان الصفحة ثابت: «مأذون أنكحة في حي ' + (v("name") || "…") + " – " + esc(r.city || (mz(MID) || {}).city || "") + '»</p>' + active;
   if (k === "faq") f = '<label>السؤال<input class="input" data-f="q" maxlength="200" value="' + v("q") + '"></label><label>الجواب<textarea class="input" data-f="a" maxlength="1500">' + v("a") + "</textarea></label>" +
     '<div class="row"><label>المفتاح <small>(حروف إنجليزية، اختياري)</small><input class="input" data-f="key" dir="ltr" maxlength="30" value="' + v("key") + '"></label>' + order + "</div>" + active;
@@ -787,7 +788,7 @@ function bContent(){
     box.querySelector("[data-cancel]").onclick = () => { box.classList.add("hidden"); box.classList.remove("open"); box.innerHTML = ""; };
     const save = box.querySelector("[data-save]");
     save.onclick = () => busy(save, async () => {
-      const d = { maazoonId: MID };
+      const d = { maazoonId: r && k === "dist" ? r.maazoonId : MID };
       if (r && !customize) d.id = r.id;
       box.querySelectorAll("[data-f]").forEach(el => { d[el.dataset.f] = el.type === "checkbox" ? el.checked : el.value; });
       if (k !== "dist" && !S.me.owner) d.maazoonId = S.me.mid;
@@ -893,7 +894,18 @@ function vSettings(){
     '<div class="panel sect"><h3>المأذونون</h3><div class="list">' + S.maazoons.map(m => '<div class="citem"><div class="t"><b>' + esc(m.shortName || m.name) + ' <span class="tag">' + esc(m.id) + '</span> <span class="tag' + (m.status === "موقوف" ? " off" : "") + '">' + esc(m.status) + "</span></b><small>" + (m.hasCode ? "له رمز دخول" : "لا يوجد رمز دخول") + " · " + (m.tgLinked ? "تيليجرام مربوط" : "تيليجرام غير مربوط") + (m.lastLoginAt ? " · آخر دخول " + esc(m.lastLoginAt) : "") + "</small></div>" +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn btn-soft btn-sm" type="button" data-reset="' + esc(m.id) + '">رمز دخول جديد</button>' +
       '<button class="btn btn-soft btn-sm" type="button" data-toggle="' + esc(m.id) + '">' + (m.status === "موقوف" ? "تشغيل الموقع" : "إيقاف الموقع") + "</button></div></div>").join("") + '</div><div id="newCode"></div>' +
-      '<p class="hint">إضافة مأذون جديد في المرحلة القادمة. حالياً: أضف سطراً في ورقة «المأذونون» ثم ولّد له رمزاً من هنا.</p></div>' +
+      '<p><button class="btn btn-primary btn-sm" type="button" id="mzAddBtn">+ إضافة مأذون</button></p>' +
+      '<div class="ed hidden" id="mzAdd"><div class="row"><label>الاسم الكامل<input class="input" data-m="name" maxlength="80"></label><label>الاسم المختصر <small>(يظهر في الموقع)</small><input class="input" data-m="shortName" maxlength="60"></label></div>' +
+        '<div class="row"><label>المدينة<select class="input" data-m="city">' + S.cities.map(c => opt(c.name, "")).join("") + '</select></label><label>الجوال<input class="input" data-m="phone" dir="ltr" inputmode="tel" placeholder="05XXXXXXXX"></label></div>' +
+        '<div class="row"><label>رمز الرابط <small>(اختياري، مثل ahmad)</small><input class="input" data-m="slug" dir="ltr" maxlength="40"></label><label>رقم الرخصة <small>(اختياري)</small><input class="input" data-m="license" dir="ltr" maxlength="20"></label></div>' +
+        '<div class="row"><label>حالة الموقع<select class="input" data-m="status">' + opt("تجريبي", "تجريبي") + opt("نشط", "") + opt("موقوف", "") + '</select></label><label>البريد <small>(اختياري، للتنبيه الاحتياطي)</small><input class="input" data-m="email" dir="ltr"></label></div>' +
+        '<label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" data-m="cityOwner" checked> مأذون هذه المدينة (صفحتها الرئيسية وأحياؤها الجديدة له)</label>' +
+        '<div class="err" id="mzErr"></div><div class="acts"><button class="btn btn-soft btn-sm" type="button" id="mzCancel">إلغاء</button><button class="btn btn-primary btn-sm" type="button" id="mzSave">أضف المأذون</button></div></div>' +
+      '<p class="hint">بعد الإضافة يظهر رمز دخوله مرة واحدة. أرسله له مع رابط اللوحة، فيدخل ويرى حجوزاته فقط، ويربط تيليجرام من تبويب «البيانات».</p></div>' +
+    '<div class="panel sect"><h3>المدن</h3><p class="hint" style="margin-top:0">المدينة النشطة لها صفحة رئيسية (مثل /jeddah) ولكل حي فيها صفحة (مثل /jeddah/rawdah). المدينة المنورة روابطها كما هي.</p><div class="list">' +
+      S.cities.map((c, i) => '<div class="citem"><div class="t"><b>' + esc(c.name) + ' <span class="tag" dir="ltr">' + esc(c.slug) + "</span>" + (c.active ? "" : ' <span class="tag off">غير نشطة</span>') + "</b><small>المأذون: " + esc(c.maazoonId ? mzName(c.maazoonId) : "لم يُحدد") + "</small></div>" +
+        '<button class="btn btn-soft btn-sm" type="button" data-city="' + i + '">تعديل</button></div><div class="ed hidden" id="ct-' + i + '"></div>').join("") +
+      '</div><p><button class="btn btn-primary btn-sm" type="button" data-city="new">+ إضافة مدينة</button></p><div class="ed hidden" id="ct-new"></div></div>' +
     '<div class="panel sect"><h3>صفحات الأحياء</h3><p class="hint" style="margin-top:0">تُبنى وحدها كل 5 دقائق عند إضافة حي أو مدينة أو تعديل اسم. هذا الزر احتياط فقط.</p>' +
       (S.siteAuto >= 0 ? '<p class="info">✓ البناء التلقائي يعمل (آخر فحص قبل ' + S.siteAuto + ' دقيقة).</p>' : '<p class="info">البناء التلقائي في GitHub لم يعمل بعد. حتى يعمل: تُنشر الأحياء الجديدة بأمر npm run publish.</p>') + '<p><button class="btn btn-soft btn-sm" type="button" id="siteRefresh">تحديث صفحات الأحياء الآن</button></p></div>' +
     '<div class="panel sect"><h3>الأمان والنسخ الاحتياطي</h3><p><button class="btn btn-soft btn-sm" type="button" id="bkNow">نسخة احتياطية الآن</button> <button class="btn btn-soft btn-sm" type="button" id="outAll">تسجيل خروج كل الأجهزة</button> <button class="btn btn-soft btn-sm" type="button" id="logBtn">عرض السجل</button></p>' +
@@ -918,6 +930,32 @@ function bSettings(){
     if (await act("api_saveProfile", m.id, { status: next })) toast(next === "موقوف" ? "تم إيقاف الموقع" : "تم تشغيل الموقع");
   }));
   $("#siteRefresh").onclick = () => busy($("#siteRefresh"), () => refreshSite($("#siteRefresh")));
+  $("#mzAddBtn").onclick = () => { $("#mzAdd").classList.remove("hidden"); $("#mzAdd").classList.add("open"); $('#mzAdd [data-m="name"]').focus(); };
+  $("#mzCancel").onclick = () => { $("#mzAdd").classList.add("hidden"); $("#mzAdd").classList.remove("open"); };
+  $("#mzSave").onclick = () => busy($("#mzSave"), async () => {
+    const p = {}; $$("#mzAdd [data-m]").forEach(el => { p[el.dataset.m] = el.type === "checkbox" ? el.checked : el.value.trim(); });
+    const r = await rpc("api_addMaazoon", TOK, p); if (!r.ok){ $("#mzErr").textContent = r.error; return; }
+    await load(); MID = r.id;
+    $("#newCode").innerHTML = '<p class="info" style="margin-top:14px">أُضيف المأذون ' + esc(p.shortName || p.name) + ' (' + esc(r.id) + '). رمز دخوله (يظهر مرة واحدة، أرسله له بطريقة آمنة):</p><div class="codebox">' + esc(r.code) + "</div>";
+    $("#newCode").scrollIntoView({ block: "center" });
+  });
+  $$("[data-city]").forEach(b => b.onclick = () => {
+    const i = b.dataset.city, c = i === "new" ? null : S.cities[+i], box = $("#ct-" + i);
+    $$('[id^="ct-"]').forEach(e => { e.classList.add("hidden"); e.classList.remove("open"); e.innerHTML = ""; });
+    box.innerHTML = '<div class="row"><label>اسم المدينة<input class="input" data-c="name" maxlength="40" value="' + esc(c ? c.name : "") + '"' + (c ? " readonly" : "") + '></label><label>الاسم اللاتيني للرابط <small>(مثل jeddah)</small><input class="input" data-c="slug" dir="ltr" maxlength="40" value="' + esc(c ? c.slug : "") + '"></label></div>' +
+      '<div class="row"><label>مأذون المدينة<select class="input" data-c="maazoonId">' + opt("", c ? c.maazoonId : "", "— لم يُحدد —") + S.maazoons.map(m => opt(m.id, c ? c.maazoonId : "", (m.shortName || m.name) + " (" + m.id + ")")).join("") + '</select></label>' +
+      '<label>نشطة؟<select class="input" data-c="active">' + opt("نعم", c && !c.active ? "لا" : "نعم", "نعم، تظهر صفحاتها") + opt("لا", c && !c.active ? "لا" : "نعم", "لا، مخفية") + "</select></label></div>" +
+      (c ? "" : '<div class="row"><label>خط العرض <small>(اختياري، لأوقات الصلاة)</small><input class="input" data-c="lat" dir="ltr" placeholder="21.4858"></label><label>خط الطول <small>(اختياري)</small><input class="input" data-c="lng" dir="ltr" placeholder="39.1925"></label></div>') +
+      '<div class="err" data-err></div><div class="acts"><button class="btn btn-soft btn-sm" type="button" data-cancel>إلغاء</button><button class="btn btn-primary btn-sm" type="button" data-save>حفظ</button></div>';
+    box.classList.remove("hidden"); box.classList.add("open");
+    box.querySelector("[data-cancel]").onclick = () => { box.classList.add("hidden"); box.classList.remove("open"); box.innerHTML = ""; };
+    const sv = box.querySelector("[data-save]");
+    sv.onclick = () => busy(sv, async () => {
+      const d = {}; box.querySelectorAll("[data-c]").forEach(el => { d[el.dataset.c] = el.value.trim(); });
+      const r = await rpc("api_saveCity", TOK, d); if (!r.ok){ box.querySelector("[data-err]").textContent = r.error; return; }
+      toast("تم الحفظ، وتُنشر صفحات المدينة خلال دقائق"); await load();
+    });
+  });
   $("#bkNow").onclick = () => busy($("#bkNow"), async () => { const r = await act("api_backupNow"); if (r) toast("تمت النسخة: " + r.name); });
   $("#outAll").onclick = () => busy($("#outAll"), async () => { if (confirm("سيُطلب الرمز من جديد على كل الأجهزة، ومنها هذا. متابعة؟")) await act("api_logoutAll"); });
   $("#logBtn").onclick = () => busy($("#logBtn"), async () => {
