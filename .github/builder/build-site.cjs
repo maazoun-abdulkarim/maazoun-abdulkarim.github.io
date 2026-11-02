@@ -44,7 +44,15 @@ function config() {
   const domain = String(c.domain || '').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   c.domain = domain;
   c.base = domain ? 'https://' + domain + '/' : 'https://' + c.githubUser + '.github.io/';
+  c.googleVerify = verifyCode(c.googleVerify);
   return c;
+}
+
+/* رمز وسم التحقق من Search Console: يقبل الرمز وحده أو الوسم كاملاً */
+function verifyCode(v) {
+  v = String(v || '').trim();
+  const m = v.match(/content=["']([^"']+)["']/);
+  return (m ? m[1] : v).replace(/[^\w-]/g, '');
 }
 
 /* طلب لـ Apps Script بنفس طريقة الموقع: POST بنص JSON */
@@ -151,6 +159,7 @@ function head(o) {
     '\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">' +
     '\n<meta name="description" content="' + escA(o.desc) + '">' +
     '\n<link rel="canonical" href="' + escA(o.url) + '">' +
+    (o.verify ? '\n<meta name="google-site-verification" content="' + escA(o.verify) + '">' : '') +
     '\n<meta property="og:type" content="website"><meta property="og:locale" content="ar_SA">' +
     '\n<meta property="og:site_name" content="' + escA(o.siteName) + '">' +
     '\n<meta property="og:title" content="' + escA(o.title) + '">' +
@@ -193,7 +202,7 @@ function build(sitemap, conf, opts) {
       const img = conf.base + ogImage(ogHtml(m, ogLine1, m.shortName + ' · ' + m.title), ogName(p), opts);
       const html = render('Site', Object.assign({}, D, boot, { avail: null, base: conf.api, links: Object.assign({ self: url(p) }, links) }), m.colors);
       const full = inject(html, head({ title, desc, url: url(p), image: img, siteName: m.shortName + ' – ' + m.title, color: m.colors.deep,
-        ld: business(url(p), area, img), api: conf.api }));
+        ld: business(url(p), area, img), api: conf.api, verify: p === '' ? conf.googleVerify : '' }));
       write(fileOf(p), full);
       // صفحة لها صفحات تحتها (مثل /jeddah و/jeddah/rawdah): نسخة index أيضاً حتى يفتحها GitHub بالشكلين
       if (p && (s.districts.some(d => d.path.startsWith(p + '/')) || s.privacyPath.startsWith(p + '/'))) write(p + '/index.html', full);
@@ -263,7 +272,7 @@ function writeBuilder(out, conf) {
   fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
   fs.copyFileSync(__filename, path.join(dir, 'build-site.cjs'));
   TEMPLATES.forEach(n => fs.copyFileSync(path.join(TPL, n + '.html'), path.join(dir, 'templates', n + '.html')));
-  fs.writeFileSync(path.join(dir, 'site.config.json'), JSON.stringify({ domain: conf.domain, githubUser: conf.githubUser, repo: conf.repo, api: conf.api }, null, 2) + '\n');
+  fs.writeFileSync(path.join(dir, 'site.config.json'), JSON.stringify({ domain: conf.domain, githubUser: conf.githubUser, repo: conf.repo, api: conf.api, googleVerify: conf.googleVerify || '' }, null, 2) + '\n');
   fs.mkdirSync(path.join(out, '.github', 'workflows'), { recursive: true });
   fs.writeFileSync(path.join(out, '.github', 'workflows', 'build.yml'), WORKFLOW);
 }
