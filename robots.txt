@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 Disallow: /panel
-Sitemap: https://maazounabdulkarim-cloud.github.io/sitemap.xml
+Sitemap: https://maazoun-abdulkarim.github.io/sitemap.xml
