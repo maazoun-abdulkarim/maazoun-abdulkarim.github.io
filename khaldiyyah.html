@@ -399,6 +399,11 @@ button[aria-busy="true"]{opacity:.7;cursor:progress}
 .hcal-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-inline-end:5px;vertical-align:-1px}
 .lg-today{border:2px solid var(--accent)}.lg-sel{background:var(--primary)}.lg-off{background:var(--line)}
 .opt.slot:disabled{opacity:.45;cursor:not-allowed}
+.tgrid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}
+.tgrid .tchip{justify-content:center;text-align:center}
+.tgrid .tchip:first-child{grid-column:1/-1}
+.tgrid .tchip:disabled{background:var(--surface-2);border-style:dashed}
+.tgrid .tchip:disabled b{text-decoration:line-through}
 .dist-wrap{position:relative;padding-top:22px}
 .dist-head{font-family:"Amiri",serif;font-size:clamp(22px,3.8vw,30px);font-weight:700;color:var(--c-sand);margin:0;line-height:1.45;display:flex;align-items:center;justify-content:center;gap:8px;text-align:center;border-bottom:1px solid rgba(209,173,140,.35);padding-bottom:14px}
 .dist-head svg{width:22px;height:22px;flex:none}
@@ -528,8 +533,10 @@ body.site-on{font-size:17px}
           <p class="hint hidden" id="calLoad" role="status" style="text-align:center;margin:8px 0 0">جاري تحميل المواعيد المتاحة…</p>
           <div class="hcal-legend"><span><i class="lg-today"></i>اليوم</span><span><i class="lg-sel"></i>المختار</span><span><i class="lg-off"></i>غير متاح</span></div>
         </div>
-        <span class="label" style="margin-top:20px" id="timesHead">٢. اختر الوقت <small id="timeDay"></small></span>
+        <span class="label" style="margin-top:20px" id="timesHead">٢. اختر الصلاة <small id="timeDay"></small></span>
         <div class="opts" id="times"></div>
+        <span class="label hidden" style="margin-top:20px" id="hoursHead">٣. اختر الوقت بعد الصلاة <small id="hoursPrayer"></small></span>
+        <div class="opts tgrid" id="hours"></div>
         <p class="hint" id="timeHint">اختر اليوم أولاً، ثم تظهر الأوقات هنا.</p>
         <div class="err" id="e1" role="alert"></div>
         <div class="pane-foot"><span></span><button class="btn btn-primary" type="button" data-next="2">التالي</button></div>
@@ -676,8 +683,8 @@ const validPhone = p => /^05\d{8}$/.test(normPhone(p));
 const intl = p => "966" + normPhone(p).slice(1);
 const toMin = t => { const [h, m] = String(t).split(":").map(Number); return h * 60 + m; };
 function approxT(t){ if (!/^\d\d:\d\d$/.test(t || "")) return ""; const [h, m] = t.split(":").map(Number); return "تقريباً " + (h % 12 || 12) + ":" + pad(m) + " " + (h < 12 ? "صباحاً" : "مساءً"); }
-/* «بعد العشاء (تقريباً 7:30 مساءً)»، والحجوزات القديمة بالساعة */
-const whenOf = b => b.prayer ? b.prayer + " (" + approxT(b.time) + ")" : "الساعة " + fmtTime(b.time);
+/* الموعد المحفوظ «بعد العشاء – 9:30 مساءً»، وإلا القديم «بعد العشاء (تقريباً 7:30 مساءً)» أو بالساعة */
+const whenOf = b => b.slot || (b.prayer ? b.prayer + " (" + approxT(b.time) + ")" : "الساعة " + fmtTime(b.time));
 function fmtTime(t){ if (!/^\d\d:\d\d$/.test(t || "")) return t || ""; const [h, m] = t.split(":").map(Number); return (h % 12 || 12) + ":" + pad(m) + " " + (h < 12 ? "ص" : "م"); }
 function F(opts, loc){ try { return new Intl.DateTimeFormat(loc, Object.assign({ timeZone: "UTC" }, opts)); } catch (e) { return new Intl.DateTimeFormat("ar", Object.assign({ timeZone: "UTC" }, opts)); } }
 const HL = "ar-SA-u-ca-islamic-umalqura-nu-latn";
@@ -727,10 +734,15 @@ function applyLogo(url){ if (url && /^https:\/\/[^\s"'<>`\\]+$/.test(url)) docum
 <script>
 /* ════ الموقع العام ════ */
 const D = BOOT, M = D.m, SLUG = M.slug;
-const sel = { date: null, prayer: null, lat: null, lng: null, answers: {} };
-/* الأيام المتاحة تصل مختصرة: [تاريخ، وقت، متبقٍ، وقت، متبقٍ…] */
-const unwire = w => ({ from: w.from, to: w.to, days: w.days.map(r => ({ date: r[0], slots: w.keys.map((k, i) => ({
-  key: k, label: k === "dhuhr" && dateOf(r[0]).getUTCDay() === 5 ? "بعد الجمعة" : w.labels[i], time: r[1 + 2 * i], left: r[2 + 2 * i] })) })) });
+const sel = { date: null, prayer: null, time: null, lat: null, lng: null, answers: {} };
+/* الأيام المتاحة تصل مختصرة: [تاريخ، ثم لكل صلاة: وقت «مباشرة»، ونص المتبقي حرفاً لكل وقت (أساس 36)]
+   الأوقات المحددة تبدأ عند أول مضاعف لـ gap بعد «مباشرة» بربع ساعة، وتتوالى كل gap دقيقة (مثل firstFixed_ في الخادم) */
+const hhmm = n => pad(Math.floor(n / 60)) + ":" + pad(n % 60);
+const unwire = w => ({ from: w.from, to: w.to, days: w.days.map(r => ({ date: r[0], slots: w.keys.map((k, i) => {
+  const t = r[1 + 2 * i], L = String(r[2 + 2 * i] || "").split("").map(c => parseInt(c, 36)), f = Math.ceil((toMin(t) + 15) / w.gap) * w.gap;
+  return { key: k, label: k === "dhuhr" && dateOf(r[0]).getUTCDay() === 5 ? "بعد الجمعة" : w.labels[i], time: t, left: L[0] || 0,
+    times: L.slice(1).map((n, j) => ({ time: hhmm(f + j * w.gap), left: n })) };
+}) })) });
 // في الموقع الجديد تصل المواعيد بعد فتح الصفحة (loadLive)، وحتى ذلك يظهر تقويم فارغ مع «جاري التحميل»
 let AV = D.avail ? unwire(D.avail) : { from: riyadhToday(), to: riyadhToday(), days: [] };
 const siteUrl = () => D.links ? D.links.self : D.base + "?m=" + encodeURIComponent(SLUG) + (D.district ? "&d=" + encodeURIComponent(D.district.slug) : "");
@@ -756,8 +768,16 @@ function applyProfile(){
 /* ───── الخطوة 1: التقويم الهجري الشهري ثم موعد الصلاة ───── */
 const dayOf = k => AV.days.find(d => d.date === k);
 const addK = (k, n) => new Date(Date.parse(k + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
-const freeSlots = d => d ? d.slots.filter(s => s.left > 0) : [];
-const slotOf = () => { const d = dayOf(sel.date); return d && d.slots.find(s => s.key === sel.prayer); };
+/* الصلاة متاحة إذا بقي فيها وقت واحد على الأقل */
+const anyLeft = s => s.left > 0 || s.times.some(x => x.left > 0);
+const freeSlots = d => d ? d.slots.filter(anyLeft) : [];
+const prayerOf = () => { const d = dayOf(sel.date); return d && d.slots.find(s => s.key === sel.prayer); };
+/* الوقت المختار: «مباشرة» أو وقت محدد، مع نص الموعد كما يُحفظ */
+const slotOf = () => {
+  const p = prayerOf(); if (!p || !sel.time) return null;
+  const direct = sel.time === p.time, x = direct ? p : p.times.find(t => t.time === sel.time);
+  return x && x.left > 0 ? { label: p.label, time: sel.time, slot: slotText(p.label, sel.time, direct) } : null;
+};
 const approx = approxT;
 /* أجزاء التاريخ الهجري (أم القرى)، وإن لم يدعمها الجهاز فالميلادي */
 const HP = (() => {
@@ -808,7 +828,7 @@ function renderDays(){
     b.setAttribute("aria-label", dayLabel(k) + (k === today ? "، اليوم" : "") + (st ? "، " + st : ""));
     b.setAttribute("aria-pressed", sel.date === k);
     if (st){ b.disabled = true; b.title = st; }
-    else b.onclick = () => { sel.date = k; sel.prayer = null; renderDays(); renderTimes(); $("#e1").textContent = ""; glide("#timesHead"); };
+    else b.onclick = () => { sel.date = k; sel.prayer = null; sel.time = null; renderDays(); renderTimes(); $("#e1").textContent = ""; glide("#timesHead"); };
     grid.appendChild(b);
   });
 }
@@ -819,19 +839,38 @@ const PICON = { fajr: "sun", dhuhr: "sun", asr: "sun", maghrib: "moon", isha: "m
 function renderTimes(){
   const box = $("#times"); box.innerHTML = "";
   const d = dayOf(sel.date);
-  if (!d){ $("#timeHint").classList.remove("hidden"); $("#timeDay").textContent = ""; return; }
+  if (!d){ $("#timeHint").classList.remove("hidden"); $("#timeDay").textContent = ""; renderHours(); return; }
   $("#timeHint").classList.add("hidden"); $("#timeDay").textContent = "(" + dayLabel(sel.date) + ")";
-  box.innerHTML = d.slots.map(s => '<button type="button" class="opt slot' + (sel.prayer === s.key ? " sel" : "") + '" data-p="' + esc(s.key) + '" aria-pressed="' + (sel.prayer === s.key) + '"' + (s.left ? "" : " disabled") +
-    '><svg><use href="#i-' + PICON[s.key] + '"/></svg><span><b>' + esc(s.label) + "</b><small>" + (s.left ? esc(approx(s.time)) : "مكتمل") + "</small></span></button>").join("");
-  $$("#times [data-p]").forEach(b => b.onclick = () => { sel.prayer = b.dataset.p; renderTimes(); $("#e1").textContent = ""; glide('[data-pane="1"] .pane-foot'); });
+  box.innerHTML = d.slots.map(s => {
+    const free = [s].concat(s.times).filter(x => x.left > 0), last = free.length ? free[free.length - 1].time : "";
+    return '<button type="button" class="opt slot' + (sel.prayer === s.key ? " sel" : "") + '" data-p="' + esc(s.key) + '" aria-pressed="' + (sel.prayer === s.key) + '"' + (free.length ? "" : " disabled") +
+      '><svg><use href="#i-' + PICON[s.key] + '"/></svg><span><b>' + esc(s.label) + "</b><small>" + (free.length ? esc(free.length > 1 ? "من " + clockT(free[0].time) + " إلى " + clockT(last) : clockT(free[0].time)) : "مكتمل") + "</small></span></button>";
+  }).join("");
+  $$("#times [data-p]").forEach(b => b.onclick = () => { sel.prayer = b.dataset.p; sel.time = null; renderTimes(); $("#e1").textContent = ""; glide("#hoursHead"); });
+  renderHours();
 }
+/* الأوقات بعد الصلاة المختارة: «بعد العشاء مباشرة» ثم 8:00، 8:30… والمحجوز باهت لا يُختار */
+function renderHours(){
+  const p = prayerOf(), box = $("#hours"), head = $("#hoursHead");
+  if (!p){ box.innerHTML = ""; head.classList.add("hidden"); return; }
+  head.classList.remove("hidden"); $("#hoursPrayer").textContent = p.label;
+  const btn = (t, left, title, sub) => '<button type="button" class="opt slot tchip' + (sel.time === t ? " sel" : "") + '" data-t="' + esc(t) + '" aria-pressed="' + (sel.time === t) + '"' + (left ? "" : ' disabled aria-label="' + esc(title) + ' محجوز"') +
+    "><span><b>" + esc(title) + "</b>" + (sub || !left ? "<small>" + esc(left ? sub : "محجوز") + "</small>" : "") + "</span></button>";
+  box.innerHTML = btn(p.time, p.left, p.label + " مباشرة", approx(p.time)) + p.times.map(x => btn(x.time, x.left, clockT(x.time), "")).join("");
+  $$("#hours [data-t]").forEach(b => b.onclick = () => { sel.time = b.dataset.t; renderHours(); $("#e1").textContent = ""; glide('[data-pane="1"] .pane-foot'); });
+}
+/* «9:30 مساءً» */
+function clockT(t){ const [h, m] = t.split(":").map(Number); return (h % 12 || 12) + ":" + pad(m) + " " + (h < 12 ? "صباحاً" : "مساءً"); }
+/* نص الموعد كما يحفظه الخادم (slotText_) */
+const slotText = (label, t, direct) => direct ? label + " مباشرة (" + approx(t) + ")" : label + " – " + clockT(t);
 /* ينقل النظر بهدوء إلى الخطوة التالية إذا لم تكن ظاهرة في الشاشة */
 const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 function glide(q){ const el = $(q); if (!el) return; const r = el.getBoundingClientRect(); if (r.top < 70 || r.bottom > innerHeight - 90) el.scrollIntoView({ behavior: calm(), block: "center" }); }
 /* أي رسالة خطأ تظهر تُنقل إلى وسط الشاشة حتى لا تفوت القارئ */
 new MutationObserver(ms => ms.forEach(m => { const el = m.target.nodeType === 1 ? m.target : m.target.parentElement; if (el && el.classList.contains("err") && el.textContent.trim() && el.offsetParent) glide("#" + el.id); }))
   .observe(document.body, { subtree: true, childList: true, characterData: true });
-const whenText = (prayer, time) => prayer ? prayer + " (" + approx(time) + ")" : "الساعة " + fmtTime(time);
+/* الموعد المحفوظ «بعد العشاء – 9:30 مساءً»، والحجوزات القديمة «بعد العشاء (تقريباً …)» أو بالساعة */
+const whenText = (prayer, time, slot) => slot || (prayer ? prayer + " (" + approx(time) + ")" : "الساعة " + fmtTime(time));
 
 /* ───── الأسئلة الإضافية من الجدول ───── */
 function renderQuestions(){
@@ -886,13 +925,13 @@ function districtValue(){
 
 /* ───── التنقل بين الخطوات ───── */
 function goStep(n, noScroll){
-  if (n >= 2 && (!sel.date || !slotOf())){ $("#e1").textContent = sel.date ? "اختر موعد العقد للمتابعة." : "اختر اليوم من التقويم للمتابعة."; return; }
+  if (n >= 2 && (!sel.date || !slotOf())){ $("#e1").textContent = !sel.date ? "اختر اليوم من التقويم للمتابعة." : !sel.prayer ? "اختر الصلاة للمتابعة." : "اختر الوقت للمتابعة."; return; }
   if (n === 3){
     const m = missing(2); if (m){ $("#e2").textContent = m; return; }
     const dv = districtValue(); if (!dv){ $("#e2").textContent = "اختر الحي أو اكتب اسمه."; return; }
     const map = $("#fMap").value.trim();
     if (map && !/^https:\/\/\S+$/.test(map)){ $("#e2").textContent = "الصق رابط الموقع كاملاً، يبدأ بـ https://"; return; }
-    const rows = [["اليوم", dayLabel(sel.date)], ["الموعد", whenText(slotOf().label, slotOf().time)]]
+    const rows = [["اليوم", dayLabel(sel.date)], ["الموعد", slotOf().slot]]
       .concat(D.questions.filter(q => q.step === 2 && sel.answers[q.key] !== undefined && sel.answers[q.key] !== "").map(q => [q.label, optTitle(q)]))
       .concat([["الحي", dv.name]]);
     $("#summary").innerHTML = rows.map(r => "<div><span>" + esc(r[0]) + "</span><b>" + esc(r[1]) + "</b></div>").join("");
@@ -932,14 +971,14 @@ $("#btnSubmit").onclick = () => busy($("#btnSubmit"), async () => {
   $("#btnSubmit").textContent = "جارٍ الإرسال…";
   const dv = districtValue();
   const r = await rpc("pub_book", SLUG, {
-    date: sel.date, prayer: sel.prayer, name: name, phone: phone, districtId: dv.id, district: dv.name,
+    date: sel.date, prayer: sel.prayer, time: sel.time, name: name, phone: phone, districtId: dv.id, district: dv.name,
     mapUrl: $("#fMap").value.trim(), lat: sel.lat == null ? "" : sel.lat, lng: sel.lng == null ? "" : sel.lng,
     notes: $("#fNotes").value.trim(), answers: sel.answers, consent: true, hp: $("#fHp").value,
     source: D.district && dv.id === D.district.id ? "district" : "main"
   });
   if (!r.ok){
     e3.textContent = r.error;
-    if (/لم يعد متاحاً|حدّث/.test(r.error)){ sel.prayer = null; await refreshAvail(); }
+    if (/لم يعد متاحاً|حدّث/.test(r.error)){ sel.time = null; await refreshAvail(); goStep(1); }
     return;
   }
   const b = r.booking;
@@ -948,8 +987,8 @@ $("#btnSubmit").onclick = () => busy($("#btnSubmit"), async () => {
   const okd = b.status === "مؤكد";
   $("#doneTitle").textContent = okd ? "تم تأكيد موعدك ✓" : "تم استلام طلبك";
   $("#doneSub").textContent = okd ? "موعدك مؤكد بإذن الله. هذا رقم حجزك، احتفظ به:" : "يتواصل معك المأذون لتأكيد الموعد. هذا رقم حجزك، احتفظ به:";
-  $("#doneNum").textContent = b.no; $("#doneWhen").textContent = dayLabel(b.date) + "، " + whenText(b.prayer, b.time);
-  const lines = ["السلام عليكم، حجزت موعد عقد نكاح:", "رقم الحجز: " + b.no, "الاسم: " + name, "اليوم: " + dayLabel(b.date), "الموعد: " + whenText(b.prayer, b.time)]
+  $("#doneNum").textContent = b.no; $("#doneWhen").textContent = dayLabel(b.date) + "، " + whenText(b.prayer, b.time, b.slot);
+  const lines = ["السلام عليكم، حجزت موعد عقد نكاح:", "رقم الحجز: " + b.no, "الاسم: " + name, "اليوم: " + dayLabel(b.date), "الموعد: " + whenText(b.prayer, b.time, b.slot)]
     .concat(D.questions.filter(q => sel.answers[q.key] !== undefined && sel.answers[q.key] !== "" && sel.answers[q.key] !== false).map(q => q.label + ": " + optTitle(q)))
     .concat(["الحي: " + b.district]);
   if (M.whatsapp) $("#doneWa").href = "https://wa.me/" + intl(M.whatsapp) + "?text=" + encodeURIComponent(lines.join("\n")); else $("#doneWa").classList.add("hidden");
@@ -959,7 +998,7 @@ $("#btnSubmit").onclick = () => busy($("#btnSubmit"), async () => {
   refreshAvail();
 });
 $("#doneNew").onclick = () => {
-  Object.assign(sel, { date: null, prayer: null, lat: null, lng: null, answers: {} });
+  Object.assign(sel, { date: null, prayer: null, time: null, lat: null, lng: null, answers: {} });
   ["#fName", "#fPhone", "#fNotes", "#fMap", "#fDistrict"].forEach(s => $(s).value = ""); $("#fConsent").checked = false; $("#locState").textContent = "";
   $("#doneCard").classList.add("hidden"); $("#stepsBar").classList.remove("hidden");
   renderDays(); renderTimes(); renderQuestions(); setupDistrict(); renderReady(); goStep(1);
@@ -991,11 +1030,11 @@ async function track(){
     const line = b.status === "ملغى" ? '<p style="color:var(--bad);margin:10px 0 0">أُلغي هذا الحجز. للاستفسار تواصل معنا.</p>'
       : '<div class="tline">' + FLOW.map((f, i) => '<div class="' + (i <= lvl ? "ok" : "") + (i < lvl ? " pass" : "") + '">' + f + "</div>").join("") + "</div>";
     const det = b.full ? (b.district ? "الحي: " + b.district + "\n" : "") + (b.details ? b.details + "\n" : "") + (b.notes ? "ملاحظات: " + b.notes : "") : "";
-    const wa = t => "https://wa.me/" + intl(M.whatsapp) + "?text=" + encodeURIComponent(t + (b.full ? "\nرقم الحجز: " + b.no : "\nجوالي المسجل: " + normPhone(q)) + "\nالموعد الحالي: " + dayLabel(b.date) + "، " + whenText(b.prayer, b.time));
+    const wa = t => "https://wa.me/" + intl(M.whatsapp) + "?text=" + encodeURIComponent(t + (b.full ? "\nرقم الحجز: " + b.no : "\nجوالي المسجل: " + normPhone(q)) + "\nالموعد الحالي: " + dayLabel(b.date) + "، " + whenText(b.prayer, b.time, b.slot));
     const acts = (b.status === "جديد" || b.status === "مؤكد") && M.whatsapp ? '<div class="acts"><a class="btn btn-soft btn-sm" target="_blank" rel="noopener" href="' + esc(wa("السلام عليكم، أرغب بتعديل موعد عقد النكاح.")) + '"><svg><use href="#i-cal"/></svg>طلب تعديل الموعد</a>' +
       (b.full && b.mapUrl ? '<a class="btn btn-soft btn-sm" target="_blank" rel="noopener" href="' + esc(b.mapUrl) + '"><svg><use href="#i-pin"/></svg>الموقع</a>' : "") + "</div>" : "";
     return '<div class="tcard"><header><b>حجز رقم <span dir="ltr">' + esc(b.no) + '</span></b><span class="st st-' + esc(b.status) + '">' + esc(b.status) + '</span></header><div style="color:var(--muted);font-size:14.5px">' +
-      esc(dayLabel(b.date)) + "، " + esc(whenText(b.prayer, b.time)) + "</div>" + line + (det ? '<div class="det">' + esc(det.trim()) + "</div>" : "") + acts + "</div>";
+      esc(dayLabel(b.date)) + "، " + esc(whenText(b.prayer, b.time, b.slot)) + "</div>" + line + (det ? '<div class="det">' + esc(det.trim()) + "</div>" : "") + acts + "</div>";
   }).join("");
 }
 $("#trackBtn").onclick = () => busy($("#trackBtn"), track);

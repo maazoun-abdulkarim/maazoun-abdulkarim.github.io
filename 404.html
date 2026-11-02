@@ -376,8 +376,8 @@ const validPhone = p => /^05\d{8}$/.test(normPhone(p));
 const intl = p => "966" + normPhone(p).slice(1);
 const toMin = t => { const [h, m] = String(t).split(":").map(Number); return h * 60 + m; };
 function approxT(t){ if (!/^\d\d:\d\d$/.test(t || "")) return ""; const [h, m] = t.split(":").map(Number); return "تقريباً " + (h % 12 || 12) + ":" + pad(m) + " " + (h < 12 ? "صباحاً" : "مساءً"); }
-/* «بعد العشاء (تقريباً 7:30 مساءً)»، والحجوزات القديمة بالساعة */
-const whenOf = b => b.prayer ? b.prayer + " (" + approxT(b.time) + ")" : "الساعة " + fmtTime(b.time);
+/* الموعد المحفوظ «بعد العشاء – 9:30 مساءً»، وإلا القديم «بعد العشاء (تقريباً 7:30 مساءً)» أو بالساعة */
+const whenOf = b => b.slot || (b.prayer ? b.prayer + " (" + approxT(b.time) + ")" : "الساعة " + fmtTime(b.time));
 function fmtTime(t){ if (!/^\d\d:\d\d$/.test(t || "")) return t || ""; const [h, m] = t.split(":").map(Number); return (h % 12 || 12) + ":" + pad(m) + " " + (h < 12 ? "ص" : "م"); }
 function F(opts, loc){ try { return new Intl.DateTimeFormat(loc, Object.assign({ timeZone: "UTC" }, opts)); } catch (e) { return new Intl.DateTimeFormat("ar", Object.assign({ timeZone: "UTC" }, opts)); } }
 const HL = "ar-SA-u-ca-islamic-umalqura-nu-latn";
