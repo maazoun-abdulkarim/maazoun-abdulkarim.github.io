@@ -45,6 +45,7 @@ function config() {
   c.domain = domain;
   c.base = domain ? 'https://' + domain + '/' : 'https://' + c.githubUser + '.github.io/';
   c.googleVerify = verifyCode(c.googleVerify);
+  c.ads = adsConf(c.ads);
   return c;
 }
 
@@ -53,6 +54,23 @@ function verifyCode(v) {
   v = String(v || '').trim();
   const m = v.match(/content=["']([^"']+)["']/);
   return (m ? m[1] : v).replace(/[^\w-]/g, '');
+}
+
+/* تتبّع إعلانات جوجل: رقم الحساب AW-… ورمز لكل حدث. فارغ = لا يُحمَّل أي كود من جوجل */
+const ADS_EVENTS = ['book', 'lead', 'call', 'whatsapp'];
+function adsConf(a) {
+  a = a || {};
+  const id = String(a.id || '').trim().toUpperCase();
+  if (!/^AW-\d+$/.test(id)) return null;
+  const out = { id: id };
+  ADS_EVENTS.forEach(k => { out[k] = String(a[k] || '').trim().replace(/^AW-\d+\//i, '').replace(/[^\w-]/g, ''); });
+  return out;
+}
+// بلا بيانات شخصية: لا إشارات جوجل ولا تخصيص إعلانات، والأحداث تُرسل بلا اسم ولا جوال ولا رقم حجز
+function adsHead(a) {
+  return '\n<script async src="https://www.googletagmanager.com/gtag/js?id=' + escA(a.id) + '"></script>' +
+    '\n<script>window.ADS = ' + json(a) + ';window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}' +
+    'gtag("js", new Date());gtag("config", ADS.id, { allow_google_signals: false, allow_ad_personalization_signals: false });</script>';
 }
 
 /* طلب لـ Apps Script بنفس طريقة الموقع: POST بنص JSON */
@@ -169,7 +187,8 @@ function head(o) {
       '\n<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="' + escA(o.image) + '">' : '') +
     '\n<meta name="theme-color" content="' + escA(o.color) + '">' +
     (o.ld ? '\n<script type="application/ld+json">' + json(o.ld) + '</script>' : '') +
-    (o.api ? '\n<script>window.API = ' + json(o.api) + ';</script>' : '');
+    (o.api ? '\n<script>window.API = ' + json(o.api) + ';</script>' : '') +
+    (o.ads ? adsHead(o.ads) : '');
 }
 function inject(html, extra) {
   if (!html.includes('<meta charset="utf-8">')) throw new Error('قالب بلا meta charset');
@@ -202,7 +221,7 @@ function build(sitemap, conf, opts) {
       const img = conf.base + ogImage(ogHtml(m, ogLine1, m.shortName + ' · ' + m.title), ogName(p), opts);
       const html = render('Site', Object.assign({}, D, boot, { avail: null, base: conf.api, links: Object.assign({ self: url(p) }, links) }), m.colors);
       const full = inject(html, head({ title, desc, url: url(p), image: img, siteName: m.shortName + ' – ' + m.title, color: m.colors.deep,
-        ld: business(url(p), area, img), api: conf.api, verify: p === '' ? conf.googleVerify : '' }));
+        ld: business(url(p), area, img), api: conf.api, verify: p === '' ? conf.googleVerify : '', ads: conf.ads }));
       write(fileOf(p), full);
       // صفحة لها صفحات تحتها (مثل /jeddah و/jeddah/rawdah): نسخة index أيضاً حتى يفتحها GitHub بالشكلين
       if (p && (s.districts.some(d => d.path.startsWith(p + '/')) || s.privacyPath.startsWith(p + '/'))) write(p + '/index.html', full);
@@ -230,7 +249,7 @@ function build(sitemap, conf, opts) {
     });
 
     // سياسة الخصوصية
-    const pv = Object.assign({ m: m, base: conf.api, home: url(s.path) }, sitemap.privacy);
+    const pv = Object.assign({ m: m, base: conf.api, home: url(s.path), ads: !!conf.ads }, sitemap.privacy);
     write(fileOf(s.privacyPath), inject(render('Privacy', pv, m.colors), head({
       title: 'سياسة الخصوصية — ' + sitemap.privacy.platformName, desc: 'سياسة الخصوصية لموقع حجز ' + m.shortName + '.', url: url(s.privacyPath),
       siteName: m.shortName, color: m.colors.deep })));
@@ -272,7 +291,7 @@ function writeBuilder(out, conf) {
   fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
   fs.copyFileSync(__filename, path.join(dir, 'build-site.cjs'));
   TEMPLATES.forEach(n => fs.copyFileSync(path.join(TPL, n + '.html'), path.join(dir, 'templates', n + '.html')));
-  fs.writeFileSync(path.join(dir, 'site.config.json'), JSON.stringify({ domain: conf.domain, githubUser: conf.githubUser, repo: conf.repo, api: conf.api, googleVerify: conf.googleVerify || '' }, null, 2) + '\n');
+  fs.writeFileSync(path.join(dir, 'site.config.json'), JSON.stringify({ domain: conf.domain, githubUser: conf.githubUser, repo: conf.repo, api: conf.api, googleVerify: conf.googleVerify || '', ads: conf.ads || { id: '' } }, null, 2) + '\n');
   fs.mkdirSync(path.join(out, '.github', 'workflows'), { recursive: true });
   fs.writeFileSync(path.join(out, '.github', 'workflows', 'build.yml'), WORKFLOW);
 }

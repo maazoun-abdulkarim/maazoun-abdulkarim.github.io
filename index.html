@@ -953,6 +953,13 @@ $("#btnLoc").onclick = () => {
   }, () => { st.style.color = "var(--bad)"; st.textContent = "تعذّر تحديد الموقع، الصق الرابط بدلاً منه."; }, { enableHighAccuracy: true, timeout: 10000 });
 };
 
+/* ───── إعلانات جوجل: إشعار بالتحويل فقط، بلا أي بيانات للعميل (يعمل فقط إذا وُجد window.ADS) ───── */
+function conv(k){ try { const a = window.ADS; if (a && a[k] && window.gtag) gtag("event", "conversion", { send_to: a.id + "/" + a[k] }); } catch (e) {} }
+document.addEventListener("click", e => {
+  const a = e.target.closest && e.target.closest("a[data-tel], a[data-wa]");
+  if (a) conv(a.hasAttribute("data-tel") ? "call" : "whatsapp");
+});
+
 /* ───── إرسال الحجز ───── */
 function gcal(b){
   const d = b.date.replace(/-/g, ""), [h, m] = b.time.split(":").map(Number), e = h * 60 + m + 45;
@@ -983,6 +990,7 @@ $("#btnSubmit").onclick = () => busy($("#btnSubmit"), async () => {
     return;
   }
   const b = r.booking;
+  conv("book");
   hideLead(90);
   $$("[data-pane]").forEach(p => p.classList.add("hidden")); $("#stepsBar").classList.add("hidden"); $("#doneCard").classList.remove("hidden");
   const okd = b.status === "مؤكد";
@@ -1111,6 +1119,7 @@ $("#leadSend").onclick = () => busy($("#leadSend"), async () => {
   const r = await rpc("pub_lead", SLUG, { phone: p, consent: true, district: D.district ? D.district.name : "", hp: $("#fHp").value });
   if (!r.ok){ err.textContent = r.error; return; }
   ls.set(LEAD_KEY, String(Date.now() + 90 * DAY_MS));
+  conv("lead");
   $("#leadForm").classList.add("hidden"); $("#leadDone").classList.remove("hidden"); $("#leadOk").focus();
 });
 
