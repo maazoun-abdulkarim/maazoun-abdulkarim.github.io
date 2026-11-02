@@ -1,0 +1,35 @@
+# يبني صفحات الأحياء من الجدول كل 5 دقائق، ويرفعها إذا تغيّر شيء (حي جديد، اسم جديد، مدينة جديدة)
+# يُكتب تلقائياً من tools/build-site.cjs في مشروع المنصة، فلا تعدّله هنا
+name: build-pages
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+concurrency:
+  group: build-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: build
+        run: node .github/builder/build-site.cjs --ci
+      - name: push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git add -A
+          if git diff --cached --quiet; then echo "no changes"; exit 0; fi
+          git -c user.name="booking-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "auto: update pages"
+          for i in 1 2 3; do
+            if git push -q origin HEAD:main; then break; fi
+            git fetch -q origin main && git reset -q --soft origin/main && git -c user.name="booking-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "auto: update pages" || true
+          done
+          curl -s -o /dev/null -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${{ github.repository }}/pages/builds" || true
