@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<?!= include_('Logo') ?>
+<?!= include_('Styles') ?>
+<style><?!= colors ?></style>
+<style>
+.policy{max-width:780px;margin:0 auto;padding:36px 20px 60px}
+.policy .card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:var(--shadow)}
+.policy h1{font-size:clamp(28px,4.5vw,38px);margin-bottom:6px}
+.policy h2{font-size:22px;margin:26px 0 8px;color:var(--text)}
+.policy p,.policy li{color:var(--text)}
+.policy ol,.policy ul{padding-inline-start:22px;margin:6px 0}
+.policy .meta{color:var(--muted);font-size:14px}
+.policy .back{display:inline-flex;margin-top:22px}
+</style>
+</head>
+<body>
+<?!= include_('Icons') ?>
+<header class="top"><div class="wrap">
+  <a class="brand" id="home" target="_top"><span class="logo" aria-hidden="true"></span><span><b id="brandName"></b><small>سياسة الخصوصية</small></span></a>
+  <nav><button class="theme-btn" data-theme-btn type="button"></button></nav>
+</div></header>
+<main class="policy"><div class="card">
+  <h1>سياسة الخصوصية</h1>
+  <p class="meta" id="meta"></p>
+
+  <h2>من نحن</h2>
+  <p id="who"></p>
+
+  <h2>البيانات التي نجمعها</h2>
+  <ol>
+    <li>عند الحجز: الاسم، ورقم الجوال، والحي، وموعد العقد، وإجاباتك عن أسئلة نموذج الحجز (مثل نوع العقد ومكانه)، والملاحظات التي تكتبها.</li>
+    <li>الموقع على الخريطة: فقط إذا ضغطت «أرسل موقعي الحالي» أو لصقت رابط الموقع بنفسك.</li>
+    <li>عند ترك رقمك في نافذة «نساعدك في الحجز؟»: رقم الجوال فقط.</li>
+    <li>عند التقييم: رقم الحجز، والاسم الذي تختاره، ونص التقييم.</li>
+    <li>وقت موافقتك على هذه السياسة ورقم نسختها.</li>
+  </ol>
+  <p>لا نجمع رقم الهوية، ولا بيانات بنكية، ولا نستعمل أدوات تتبّع إعلانية.</p>
+
+  <h2>لماذا نستعمل بياناتك</h2>
+  <ol>
+    <li>لترتيب موعد عقد النكاح وتأكيده، والتواصل معك بشأنه.</li>
+    <li>لتمكينك من متابعة حالة طلبك برقم الحجز أو الجوال.</li>
+    <li>لنشر تقييمك بعد مراجعته، إن أرسلت تقييماً.</li>
+  </ol>
+  <p>لا نبيع بياناتك، ولا نشاركها مع أي جهة لأغراض تسويقية.</p>
+
+  <h2>من يطّلع على بياناتك</h2>
+  <ol>
+    <li>المأذون الذي حجزت عنده، لترتيب الموعد.</li>
+    <li>مالك المنصة، لأغراض التشغيل والدعم الفني فقط.</li>
+    <li>تُحفظ البيانات في خدمات Google (جوجل) التي تعمل عليها المنصة.</li>
+  </ol>
+
+  <h2>مدة الحفظ</h2>
+  <p id="retention"></p>
+
+  <h2>حقوقك</h2>
+  <p>وفق نظام حماية البيانات الشخصية في المملكة العربية السعودية، يحق لك طلب الاطلاع على بياناتك، أو تصحيحها، أو حذفها، أو سحب موافقتك. تواصل معنا بالوسيلة أدناه مع ذكر رقم الحجز أو الجوال، ونرد خلال مدة معقولة.</p>
+
+  <h2>التواصل</h2>
+  <p id="contact"></p>
+
+  <h2>التعديلات على هذه السياسة</h2>
+  <p>قد نحدّث هذه السياسة عند الحاجة، ويظهر تاريخ آخر تحديث ورقم النسخة أعلى الصفحة.</p>
+
+  <a class="btn btn-primary back" id="back" target="_top">العودة للموقع</a>
+</div></main>
+<script>const BOOT = <?!= boot ?>;</script>
+<?!= include_('Common') ?>
+<script>
+const P = BOOT, M = P.m;
+initTheme();
+if (M) applyLogo(M.logoUrl);
+$("#brandName").textContent = M ? M.shortName : P.platformName;
+$("#meta").textContent = "النسخة " + P.version + "، آخر تحديث " + P.updated;
+$("#who").textContent = M
+  ? "هذا الموقع خاص بـ " + M.name + "، " + M.title + " في " + M.city + (M.license ? " (رقم الرخصة " + M.license + ")" : "") + "، ويعمل ضمن " + P.platformName + "."
+  : "هذه السياسة تخص " + P.platformName + "، وتنطبق على كل مواقع الحجز التي تعمل عليها.";
+$("#retention").textContent = "نحفظ بيانات الحجز مدة لا تزيد على " + P.retention + " شهراً من تاريخ الموعد، ثم تُحذف أو تُجهّل، إلا إذا تطلّب نظام نافذ حفظها مدة أطول.";
+$("#contact").textContent = M && M.phone ? "جوال وواتساب: " + M.phone : "عبر وسائل التواصل في موقع المأذون.";
+const home = P.home || (M ? P.base + "?m=" + encodeURIComponent(M.slug) : "#");
+$("#home").href = home; $("#back").href = home;
+if (!M) $("#back").classList.add("hidden");
+</script>
+</body>
+</html>

@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<?!= include_('Logo') ?>
+<?!= include_('Styles') ?>
+<style><?!= colors ?></style>
+<style>
+.sub{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.ed label{font-size:14px;font-weight:600;display:grid;gap:6px}
+.ed .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.ed .row{grid-template-columns:1fr}}
+.ed textarea.input{min-height:70px}
+.ed small{font-weight:400;color:var(--muted)}
+.citem{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.citem .t{min-width:0}
+.citem .t b{display:block;font-size:15px}
+.citem .t small{color:var(--muted);display:block;white-space:pre-line;font-size:13.5px}
+.tag{font-size:12px;border-radius:999px;padding:2px 9px;background:var(--surface-2);border:1px solid var(--line);white-space:nowrap}
+.tag.gen{background:var(--new-bg);border-color:transparent;color:var(--new)}
+.tag.off{background:var(--bad-bg);border-color:transparent;color:var(--bad)}
+.linkbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:13.5px;margin-top:6px}
+.linkbox code{direction:ltr;overflow-wrap:anywhere;flex:1;min-width:0}
+.sect{margin-top:26px}
+.sect>h3{font-size:21px;margin-bottom:10px}
+.codebox{font-family:monospace;font-size:26px;letter-spacing:3px;direction:ltr;text-align:center;background:var(--surface-2);border:1px dashed var(--accent);border-radius:14px;padding:14px;margin:10px 0}
+.logrow{font-size:13px;border-bottom:1px dashed var(--line);padding:6px 0}
+.logrow small{color:var(--muted)}
+.swatch{display:inline-block;width:18px;height:18px;border-radius:5px;border:1px solid var(--line);vertical-align:middle}
+.bcard .det{white-space:pre-line}
+.maz-pick{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.maz-pick select{max-width:280px}
+button[aria-busy="true"]{opacity:.7;cursor:progress}
+.login .input{letter-spacing:4px;font-size:20px}
+.remember{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px;font-size:14px;color:var(--muted);cursor:pointer}
+.remember input{width:20px;height:20px;accent-color:var(--primary)}
+/* على الجوال كتطبيق: مساحة أسفل الشاشة فوق شريط الآيفون */
+.adm-body{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+</style>
+</head>
+<body>
+<?!= include_('Icons') ?>
+
+<div id="loginView" class="wrap"><div class="login">
+  <span class="logo" aria-hidden="true"></span>
+  <h2>لوحة التحكم</h2>
+  <p>أدخل الرمز السري</p>
+  <input class="input" id="code" type="password" autocomplete="current-password" dir="ltr" maxlength="64" aria-label="الرمز السري">
+  <label class="remember"><input type="checkbox" id="remember"> تذكّرني على هذا الجهاز (6 ساعات)</label>
+  <div class="err" id="loginErr" role="alert"></div>
+  <button class="btn btn-primary" style="width:100%;margin-top:12px" id="loginBtn" type="button">دخول</button>
+</div></div>
+
+<div id="panel" class="hidden">
+  <div class="adm-top"><div class="wrap">
+    <div class="who"><span class="logo" aria-hidden="true"></span><div><b id="whoName"></b><small id="whoRole">لوحة التحكم</small></div></div>
+    <div class="r">
+      <button class="icon-btn" data-theme-icon type="button" aria-label="الوضع الصباحي أو المسائي"></button>
+      <button class="icon-btn" id="refreshBtn" type="button" aria-label="تحديث"><svg><use href="#i-clock"/></svg></button>
+      <a class="icon-btn" id="siteBtn" target="_blank" rel="noopener" aria-label="عرض الموقع"><svg><use href="#i-eye"/></svg></a>
+      <button class="icon-btn" id="logoutBtn" type="button" aria-label="خروج"><svg><use href="#i-out"/></svg></button>
+    </div>
+  </div></div>
+  <div class="tabs"><div class="wrap" id="tabs" role="tablist"></div></div>
+  <div class="adm-body"><div class="wrap" id="content"></div></div>
+</div>
+
+<script>const BOOT = <?!= boot ?>;</script>
+<?!= include_('Common') ?>
+<script>
+/* ════ لوحة التحكم ════ */
+/* في الرابط الجديد (/panel) لا تُفتح اللوحة داخل إطار موقع آخر */
+if (window.API && window.top !== window.self) { try { window.top.location = window.self.location.href; } catch (e) { document.documentElement.innerHTML = ""; } }
+/* الجلسة: تُنسى عند إغلاق التبويب، إلا إذا اختار «تذكّرني» فتبقى في هذا الجهاز 6 ساعات (مثل مدة الجلسة في الخادم) */
+const REM = "panelRem";
+function savedTok(){
+  const s = ss.get("tok"); if (s) return s;
+  try { const r = JSON.parse(ls.get(REM) || "null"); if (r && r.t && r.exp > Date.now()) return r.t; } catch (e) {}
+  return "";
+}
+function saveTok(t, remember){
+  ss.set("tok", t);
+  ls.set(REM, t && remember ? JSON.stringify({ t: t, exp: Date.now() + 6 * 3600e3 }) : "");
+}
+const standalone = () => !!(navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches));
+let TOK = savedTok(), S = null, TAB = "home", FILTER = "up", QRY = "", MID = "", CAL_DAY = "", CSUB = "dist", lastNew = -1;
+const T = { home: "الرئيسية", bookings: "المواعيد", calendar: "التقويم", leads: "المهتمون", reviews: "التقييمات", content: "المحتوى", profile: "البيانات", settings: "الإعدادات" };
+const BS = ["جديد", "مؤكد", "منجز", "ملغى"];
+const today = () => new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
+const addD = (k, n) => new Date(Date.parse(k + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+const mz = id => S.maazoons.find(m => m.id === id);
+const mzName = id => { const m = mz(id); return m ? (m.shortName || m.name) : id; };
+const yes = v => v === "نعم";
+const opt = (v, cur, label) => '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + ">" + esc(label == null ? v : label) + "</option>";
+
+/* ───── الدخول ───── */
+async function login(){
+  const err = $("#loginErr"); err.textContent = "";
+  const c = $("#code").value.trim(); if (!c){ err.textContent = "اكتب الرمز."; return; }
+  const r = await rpc("api_login", c);
+  if (!r.ok){ err.textContent = r.error; return; }
+  TOK = r.token; saveTok(TOK, $("#remember").checked); $("#code").value = "";
+  await load(true);
+}
+$("#loginBtn").onclick = () => busy($("#loginBtn"), login);
+$("#code").onkeydown = e => { if (e.key === "Enter") $("#loginBtn").click(); };
+function showLogin(msg){
+  TOK = ""; saveTok("", false); S = null;
+  $("#panel").classList.add("hidden"); $("#loginView").classList.remove("hidden");
+  if (msg) $("#loginErr").textContent = msg;
+}
+$("#logoutBtn").onclick = async () => { await rpc("api_logout", TOK); showLogin(""); };
+
+/* ───── التحميل ───── */
+async function load(first){
+  const r = await rpc("api_boot", TOK);
+  if (!r.ok){ if (/الجلسة/.test(r.error)) showLogin(first ? r.error : "انتهت الجلسة، سجّل الدخول من جديد."); else toast(r.error); return false; }
+  S = r;
+  if (!MID || !mz(MID)) MID = S.me.owner ? (S.maazoons[0] || {}).id || "" : S.me.mid;
+  const nNew = S.bookings.filter(b => b.status === "جديد").length, nAll = S.bookings.length;
+  // مع التأكيد التلقائي يصل الحجز «مؤكداً»، فنعدّ كل الحجوزات لا «الجديدة» فقط
+  if (lastNew >= 0 && nAll > lastNew) toast("وصل حجز جديد");
+  lastNew = nAll;
+  document.title = (nNew ? "(" + nNew + ") " : "") + "لوحة التحكم";
+  $("#loginView").classList.add("hidden"); $("#panel").classList.remove("hidden");
+  $("#whoName").textContent = S.me.owner ? "المالك" : S.me.name;
+  $("#whoRole").textContent = S.me.owner ? "صلاحية المالك" : "لوحة التحكم";
+  const m = mz(MID); $("#siteBtn").href = m ? m.link : "#";
+  renderTabs(); render();
+  return true;
+}
+async function act(fn, ...args){
+  const r = await rpc(fn, TOK, ...args);
+  if (!r.ok){ toast(r.error); if (/الجلسة/.test(r.error)) showLogin(r.error); return null; }
+  if (r.relogin){ showLogin("سجّل الدخول بالرمز الجديد."); return r; }
+  await load();
+  return r;
+}
+$("#refreshBtn").onclick = () => busy($("#refreshBtn"), () => load());
+setInterval(() => { if (S && document.visibilityState === "visible" && !document.querySelector(".ed.open")) load(); }, 60000);
+
+/* ───── التبويبات ───── */
+function renderTabs(){
+  const nNew = S.bookings.filter(b => b.status === "جديد").length, nLead = S.leads.filter(l => l.status === "جديد").length, nRev = S.reviews.filter(r => r.status === "بانتظار المراجعة").length;
+  const badge = { bookings: nNew, leads: nLead, reviews: nRev };
+  $("#tabs").innerHTML = Object.keys(T).filter(k => k !== "settings" || S.me.owner).map(k =>
+    '<button class="tab' + (TAB === k ? " on" : "") + '" role="tab" aria-selected="' + (TAB === k) + '" data-tab="' + k + '">' + T[k] + (badge[k] ? '<span class="badge">' + badge[k] + "</span>" : "") + "</button>").join("");
+  $$("[data-tab]").forEach(b => b.onclick = () => { TAB = b.dataset.tab; renderTabs(); render(); window.scrollTo(0, 0); });
+}
+function mazPicker(){
+  if (!S.me.owner || S.maazoons.length < 2) return "";
+  return '<div class="maz-pick"><span>المأذون:</span><select class="input" id="mazSel">' + S.maazoons.map(m => opt(m.id, MID, (m.shortName || m.name) + " (" + m.status + ")")).join("") + "</select></div>";
+}
+function bindPicker(){ const s = $("#mazSel"); if (s) s.onchange = () => { MID = s.value; const m = mz(MID); $("#siteBtn").href = m ? m.link : "#"; render(); }; }
+function render(){
+  const c = $("#content");
+  c.innerHTML = ({ home: vHome, bookings: vBookings, calendar: vCalendar, leads: vLeads, reviews: vReviews, content: vContent, profile: vProfile, settings: vSettings }[TAB] || vHome)();
+  bindPicker();
+  ({ home: bHome, bookings: bBookings, calendar: bCalendar, leads: bLeads, reviews: bReviews, content: bContent, profile: bProfile, settings: bSettings }[TAB] || (() => {}))();
+}
+
+/* ───── بطاقة حجز ───── */
+function mapOf(b){ return b.mapUrl || (b.lat ? "https://maps.google.com/?q=" + b.lat + "," + b.lng : ""); }
+function bookingCard(b){
+  const wa = "https://wa.me/" + intl(b.phone) + "?text=" + encodeURIComponent("السلام عليكم " + b.name + "، بخصوص حجز عقد النكاح رقم " + b.no + " يوم " + dayLabel(b.date) + "، " + whenOf(b) + ".");
+  const map = mapOf(b);
+  return '<article class="bcard"><div class="h"><div><h3>' + esc(b.name) + ' <small style="color:var(--muted);font-weight:400" dir="ltr">' + esc(b.no) + "</small></h3>" +
+    '<div class="meta"><span class="when"><svg><use href="#i-cal"/></svg>' + esc(shortDay(b.date)) + " — " + esc(whenOf(b)) + "</span>" +
+    '<span><svg><use href="#i-pin"/></svg>' + esc(b.district) + "</span>" +
+    '<span dir="ltr"><svg><use href="#i-phone"/></svg>' + esc(b.phone) + "</span>" +
+    (S.me.owner && S.maazoons.length > 1 ? "<span>" + esc(mzName(b.maazoonId)) + "</span>" : "") + "</div></div>" +
+    '<span class="st st-' + esc(b.status) + '">' + esc(b.status) + "</span></div>" +
+    (b.answersText ? '<div class="note det">' + esc(b.answersText) + "</div>" : "") +
+    (b.notes ? '<div class="note det">ملاحظات: ' + esc(b.notes) + "</div>" : "") +
+    (b.cancelReason ? '<div class="note">سبب الإلغاء: ' + esc(b.cancelReason) + "</div>" : "") +
+    '<div class="acts"><a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="' + esc(wa) + '"><svg><use href="#i-wa"/></svg>واتساب</a>' +
+    '<a class="btn btn-soft btn-sm" target="_top" href="tel:' + esc(b.phone) + '"><svg><use href="#i-phone"/></svg>اتصال</a>' +
+    (map ? '<a class="btn btn-soft btn-sm" target="_blank" rel="noopener" href="' + esc(map) + '"><svg><use href="#i-pin"/></svg>الموقع</a>' : "") +
+    '<select data-status="' + esc(b.id) + '" aria-label="حالة الحجز">' + BS.map(s => opt(s, b.status)).join("") + "</select></div>" +
+    '<small style="color:var(--muted);display:block;margin-top:8px">أُنشئ ' + esc(b.createdAt) + " · " + esc(b.source) + (b.notify ? " · التنبيه: " + esc(b.notify) : "") + "</small></article>";
+}
+function bindStatus(){
+  $$("[data-status]").forEach(s => s.onchange = async () => {
+    let reason = "";
+    if (s.value === "ملغى"){ reason = prompt("سبب الإلغاء (اختياري):", "") ; if (reason === null){ render(); return; } }
+    s.disabled = true; await act("api_setStatus", s.dataset.status, s.value, reason); toast("تم تحديث الحالة");
+  });
+}
+
+/* ───── الرئيسية ───── */
+function vHome(){
+  const t = today(), tm = addD(t, 1), week = addD(t, 7), live = S.bookings.filter(b => b.status !== "ملغى");
+  const todayB = live.filter(b => b.date === t), upcoming = live.filter(b => b.date >= t && b.date < week);
+  const nNew = S.bookings.filter(b => b.status === "جديد").length, nLead = S.leads.filter(l => l.status === "جديد").length, nRev = S.reviews.filter(r => r.status === "بانتظار المراجعة").length;
+  const agenda = live.filter(b => b.date === t || b.date === tm).sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1));
+  const m = mz(MID);
+  return '<h2 class="adm-h">السلام عليكم' + (S.me.owner ? "" : "، " + esc(S.me.name)) + "</h2>" +
+    '<div class="stats"><div class="stat hl"><span>مواعيد اليوم</span><b>' + todayB.length + '</b></div><div class="stat"><span>طلبات جديدة</span><b>' + nNew +
+    '</b></div><div class="stat"><span>خلال 7 أيام</span><b>' + upcoming.length + '</b></div><div class="stat"><span>مهتمون جدد</span><b>' + nLead + "</b></div></div>" +
+    '<div class="grid2"><div class="panel"><h3>اليوم وغداً</h3>' + (agenda.length ? '<div class="agenda">' + agenda.map(b =>
+      "<div><time>" + esc(fmtTime(b.time)) + "</time><span><b>" + esc(b.name) + "</b><br><small style=\"color:var(--muted)\">" + (b.date === t ? "اليوم" : "غداً") + (b.prayer ? " · " + esc(b.prayer) : "") + " · حي " + esc(b.district) + '</small></span><span class="st st-' + esc(b.status) + '">' + esc(b.status) + "</span></div>").join("") + "</div>"
+      : '<p style="color:var(--muted)">لا مواعيد اليوم ولا غداً.</p>') + "</div>" +
+    '<div class="panel"><h3>يحتاج انتباهك</h3><div class="attn">' +
+      '<button type="button" data-go="bookings" data-f="new"><span>حجوزات جديدة تنتظر التأكيد</span><b>' + nNew + "</b></button>" +
+      '<button type="button" data-go="leads"><span>أرقام مهتمين لم يُتواصل معها</span><b>' + nLead + "</b></button>" +
+      '<button type="button" data-go="reviews"><span>تقييمات بانتظار موافقتك</span><b>' + nRev + "</b></button></div>" +
+      (m ? '<h3 style="margin-top:18px">رابط موقعك</h3><div class="linkbox"><code>' + esc(m.link) + '</code><button class="btn btn-soft btn-sm" type="button" data-copy="' + esc(m.link) + '">نسخ</button></div>' : "") +
+      (!S.tg.configured ? '<p class="info" style="margin-top:14px">تنبيهات تيليجرام غير مفعّلة بعد. تصل الحجوزات الآن على البريد.' + (S.me.owner ? " فعّلها من «الإعدادات»." : "") + "</p>"
+        : m && !m.tgLinked ? '<p class="info" style="margin-top:14px">لم تربط تيليجرام بعد. اربطه من تبويب «البيانات» لتصلك الحجوزات فوراً.</p>' : "") +
+    "</div></div>";
+}
+function bindCopy(){ $$("[data-copy]").forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast("تم النسخ"); } catch (e) { prompt("انسخ:", b.dataset.copy); } }); }
+function bHome(){
+  $$("[data-go]").forEach(b => b.onclick = () => { TAB = b.dataset.go; if (b.dataset.f) FILTER = b.dataset.f; renderTabs(); render(); });
+  bindCopy();
+}
+
+/* ───── المواعيد ───── */
+function vBookings(){
+  const t = today();
+  const F = { up: ["القادمة", b => b.date >= t && b.status !== "ملغى"], new: ["جديدة", b => b.status === "جديد"], today: ["اليوم", b => b.date === t], past: ["السابقة", b => b.date < t], all: ["الكل", () => true] };
+  let list = S.bookings.filter(F[FILTER][1]);
+  if (S.me.owner && S.maazoons.length > 1 && MID) list = list.filter(b => b.maazoonId === MID);
+  const q = latin(QRY).trim().toLowerCase();
+  if (q) list = list.filter(b => [b.name, b.phone, b.no, b.district].join(" ").toLowerCase().includes(q));
+  if (FILTER === "up" || FILTER === "today" || FILTER === "new") list = list.slice().sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1));
+  return mazPicker() + '<div class="toolbar">' + Object.keys(F).map(k => '<button class="chip' + (FILTER === k ? " on" : "") + '" type="button" data-f="' + k + '">' + F[k][0] + "</button>").join("") +
+    '<input class="input" id="qry" placeholder="بحث بالاسم أو الجوال أو رقم الحجز" value="' + esc(QRY) + '"></div>' +
+    (list.length ? '<div class="list">' + list.map(bookingCard).join("") + "</div>" : '<div class="empty">لا توجد مواعيد هنا.</div>') +
+    '<p class="hint">تعرض اللوحة حجوزات آخر 120 يوماً والقادمة. السجل الكامل في ورقة «الحجوزات» في الجدول.</p>';
+}
+function bBookings(){
+  $$("[data-f]").forEach(b => b.onclick = () => { FILTER = b.dataset.f; render(); });
+  const q = $("#qry"); q.oninput = () => { QRY = q.value; const pos = q.selectionStart; render(); const n = $("#qry"); n.focus(); n.setSelectionRange(pos, pos); };
+  bindStatus();
+}
+
+/* ───── التقويم والإغلاقات ───── */
+function vCalendar(){
+  const t = today(), days = [];
+  for (let i = 0; i < 28; i++) days.push(addD(t, i));
+  const mine = S.bookings.filter(b => b.maazoonId === MID && b.status !== "ملغى"), cl = S.closures.filter(c => c.maazoonId === MID);
+  if (!CAL_DAY) CAL_DAY = t;
+  const dayB = mine.filter(b => b.date === CAL_DAY).sort((a, b) => (a.time < b.time ? -1 : 1)), dayC = cl.filter(c => c.date === CAL_DAY);
+  return mazPicker() + '<div class="cal">' + days.map(k => {
+    const n = mine.filter(b => b.date === k).length, c = cl.filter(x => x.date === k), full = c.some(x => !x.from && !x.to), d = dateOf(k);
+    return '<button type="button" class="cday' + (k === CAL_DAY ? " sel" : "") + (full ? " closed" : "") + '" data-day="' + k + '"><small>' + esc(fWeekS.format(d)) + "</small><b>" + esc(fHD.format(d)) + "</b><small>" + esc(fHM.format(d)) + '</small><span class="n">' + (full ? "مغلق" : c.length ? "إغلاق جزئي" : n ? n + " موعد" : "") + "</span></button>";
+  }).join("") + "</div>" +
+  '<div class="grid2"><div class="panel"><h3>' + esc(dayLabel(CAL_DAY)) + "</h3>" + (dayB.length ? '<div class="list">' + dayB.map(bookingCard).join("") + "</div>" : '<p style="color:var(--muted)">لا مواعيد في هذا اليوم.</p>') + "</div>" +
+  '<div class="panel"><h3>إغلاق هذا اليوم</h3><p class="hint" style="margin-top:0">اتركه فارغاً لإغلاق اليوم كله، أو حدّد ساعات.</p>' +
+    '<div class="ed"><div class="row"><label>من الساعة<input class="input" id="clFrom" placeholder="مثال: 17:00" dir="ltr"></label><label>إلى الساعة<input class="input" id="clTo" placeholder="مثال: 20:00" dir="ltr"></label></div>' +
+    '<label>السبب <small>(لا يظهر للعملاء)</small><input class="input" id="clReason" maxlength="100"></label><div class="acts"><button class="btn btn-primary btn-sm" type="button" id="clAdd">أغلق</button></div></div>' +
+    (dayC.length ? '<h3 style="margin-top:16px">إغلاقات هذا اليوم</h3><div class="list">' + dayC.map(c => '<div class="citem"><div class="t"><b>' + (c.from || c.to ? esc((c.from || "00:00") + " - " + (c.to || "24:00")) : "اليوم كله") + "</b><small>" + esc(c.reason) + '</small></div><button class="btn btn-soft btn-sm" type="button" data-unclose="' + esc(c.id) + '">إلغاء الإغلاق</button></div>').join("") + "</div>" : "") +
+  "</div></div>";
+}
+function bCalendar(){
+  $$("[data-day]").forEach(b => b.onclick = () => { CAL_DAY = b.dataset.day; render(); });
+  $("#clAdd").onclick = () => busy($("#clAdd"), async () => { if (await act("api_addClosure", { maazoonId: MID, date: CAL_DAY, from: $("#clFrom").value, to: $("#clTo").value, reason: $("#clReason").value })) toast("تم الإغلاق"); });
+  $$("[data-unclose]").forEach(b => b.onclick = () => busy(b, async () => { if (await act("api_closureOff", b.dataset.unclose)) toast("أُلغي الإغلاق"); }));
+  bindStatus();
+}
+
+/* ───── المهتمون ───── */
+function vLeads(){
+  const list = S.leads;
+  return '<h2 class="adm-h">أرقام المهتمين</h2><p class="hint" style="margin-top:-8px">تركوا أرقامهم في نافذة «نساعدك في الحجز؟».</p>' +
+    (list.length ? '<div class="list">' + list.map(l => '<div class="citem"><div class="t"><b>' + (l.name ? esc(l.name) + " " : "") + '<span dir="ltr">' + esc(l.phone) + "</span></b><small>" + esc(l.createdAt) + (l.district ? " · حي " + esc(l.district) : "") + (S.me.owner && S.maazoons.length > 1 ? " · " + esc(mzName(l.maazoonId)) : "") + "</small></div>" +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><span class="st ' + (l.status === "جديد" ? "st-جديد" : "st-منجز") + '">' + esc(l.status) + '</span><a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="https://wa.me/' + esc(intl(l.phone)) + '"><svg><use href="#i-wa"/></svg>واتساب</a>' +
+      (l.status === "جديد" ? '<button class="btn btn-soft btn-sm" type="button" data-lead="' + esc(l.id) + '">تم التواصل</button>' : "") + "</div></div>").join("") + "</div>" : '<div class="empty">لا توجد أرقام بعد.</div>');
+}
+function bLeads(){ $$("[data-lead]").forEach(b => b.onclick = () => busy(b, () => act("api_setLead", b.dataset.lead, "تم التواصل"))); }
+
+/* ───── التقييمات ───── */
+function vReviews(){
+  const st = { "بانتظار المراجعة": "st-جديد", "منشور": "st-مؤكد", "مرفوض": "st-ملغى" };
+  return '<h2 class="adm-h">التقييمات</h2><p class="hint" style="margin-top:-8px">لا يظهر أي تقييم في الموقع إلا بعد موافقتك.</p>' +
+    (S.reviews.length ? '<div class="list">' + S.reviews.map(r => '<div class="citem"><div class="t"><b><span class="stars">' + "★".repeat(+r.stars || 0) + "</span> " + esc(r.name || "بلا اسم") + "</b><small>«" + esc(r.text) + "»\nحجز " + esc(r.bookingNo) + " · " + esc(r.createdAt) + "</small></div>" +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><span class="st ' + (st[r.status] || "") + '">' + esc(r.status) + "</span>" +
+      (r.status !== "منشور" ? '<button class="btn btn-primary btn-sm" type="button" data-rv="' + esc(r.id) + '" data-s="منشور">انشر</button>' : "") +
+      (r.status !== "مرفوض" ? '<button class="btn btn-soft btn-sm" type="button" data-rv="' + esc(r.id) + '" data-s="مرفوض">' + (r.status === "منشور" ? "أخفِ" : "ارفض") + "</button>" : "") + "</div></div>").join("") + "</div>" : '<div class="empty">لا توجد تقييمات بعد.</div>');
+}
+function bReviews(){ $$("[data-rv]").forEach(b => b.onclick = () => busy(b, () => act("api_setReview", b.dataset.rv, b.dataset.s))); }
+
+/* ───── المحتوى ───── */
+const SUBS = { dist: "الأحياء", faq: "الأسئلة الشائعة", q: "أسئلة نموذج الحجز", req: "متطلبات العقد" };
+function scopeTag(r){ return r.maazoonId ? (S.me.owner && S.maazoons.length > 1 ? '<span class="tag">' + esc(mzName(r.maazoonId)) + "</span>" : '<span class="tag">خاص</span>') : '<span class="tag gen">عام</span>'; }
+function offTag(r){ return yes(r.active) ? "" : ' <span class="tag off">موقوف</span>'; }
+function canEdit(r){ return S.me.owner || r.maazoonId === S.me.mid; }
+function vContent(){
+  let body = "";
+  if (CSUB === "dist"){
+    const list = S.districts.filter(d => d.maazoonId === MID);
+    body = '<p class="hint" style="margin-top:0">لكل حي صفحة خاصة يُكتب فيها اسمه تلقائياً. الاسم اللاتيني يظهر في الرابط. صفحة الحي الجديد أو الاسم الجديد تُنشر وحدها خلال 5 إلى 10 دقائق.</p>' +
+      '<p><button class="btn btn-soft btn-sm" type="button" id="siteRefresh">تحديث صفحات الأحياء الآن</button></p>' + addBtn("dist") + '<div class="list">' + list.map(d =>
+      '<div class="citem"><div class="t"><b>' + esc(d.name) + offTag(d) + (d.url && yes(d.active) ? ' <span class="tag" data-live="' + esc(d.url) + '"></span>' : "") + "</b><small>" + esc(d.city) + " · ترتيب " + esc(d.order) + '</small>' + (d.url ? '<div class="linkbox"><code>' + esc(d.url) + '</code><button class="btn btn-soft btn-sm" type="button" data-copy="' + esc(d.url) + '">نسخ</button></div>' : "") +
+      '</div><button class="btn btn-soft btn-sm" type="button" data-edit="dist" data-id="' + esc(d.id) + '">تعديل</button></div>' + '<div class="ed hidden" id="ed-' + esc(d.id) + '"></div>').join("") + "</div>";
+  } else {
+    const kind = { faq: "faq", q: "questions", req: "reqs" }[CSUB], list = S[kind].filter(r => !r.maazoonId || r.maazoonId === MID).sort((a, b) => (+a.order || 999) - (+b.order || 999));
+    const title = r => CSUB === "faq" ? r.q : CSUB === "q" ? r.label : r.text;
+    const sub = r => CSUB === "faq" ? r.a : CSUB === "q" ? "الخطوة " + r.step + " · " + r.type + (yes(r.required) ? " · إلزامي" : "") + " · المفتاح: " + r.key : (r.kind ? "لـ: " + r.kind : "لكل أنواع العقود");
+    const hint = { faq: "الأسئلة العامة تظهر لكل المأذونين. لتغيير سؤال عام عندك فقط: أضف سؤالاً خاصاً بنفس «المفتاح».", q: "أسئلة إضافية تظهر في نموذج الحجز. الاسم والجوال والموعد والحي ثابتة ولا تحتاج إضافة.", req: "تظهر في قسم «جاهزية العقد». اكتب نوع العقد إن كان المتطلب لنوع معيّن فقط." }[CSUB];
+    body = '<p class="hint" style="margin-top:0">' + hint + "</p>" + addBtn(CSUB) + '<div class="list">' + list.map(r =>
+      '<div class="citem"><div class="t"><b>' + esc(title(r)) + " " + scopeTag(r) + offTag(r) + "</b><small>" + esc(sub(r)) + "</small></div>" +
+      '<button class="btn btn-soft btn-sm" type="button" data-edit="' + CSUB + '" data-id="' + esc(r.id) + '">' + (canEdit(r) ? "تعديل" : "تخصيص") + "</button></div>" + '<div class="ed hidden" id="ed-' + esc(r.id) + '"></div>').join("") + "</div>";
+  }
+  return mazPicker() + '<div class="sub">' + Object.keys(SUBS).map(k => '<button class="chip' + (CSUB === k ? " on" : "") + '" type="button" data-sub="' + k + '">' + SUBS[k] + "</button>").join("") + "</div>" + body;
+}
+function addBtn(k){ return '<p><button class="btn btn-primary btn-sm" type="button" data-edit="' + k + '" data-id="">+ إضافة</button></p><div class="ed hidden" id="ed-new"></div>'; }
+function formFor(k, r, customize){
+  r = r || {};
+  const v = f => esc(r[f] == null ? "" : r[f]);
+  const active = '<label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" data-f="active"' + (r.id && !yes(r.active) ? "" : " checked") + "> نشط (يظهر في الموقع)</label>";
+  const order = '<label>الترتيب<input class="input" data-f="order" inputmode="numeric" value="' + v("order") + '"></label>';
+  let f = "";
+  if (k === "dist") f = '<div class="row"><label>اسم الحي<input class="input" data-f="name" maxlength="40" value="' + v("name") + '"></label><label>الاسم اللاتيني للرابط <small>(مثل al-shoran)</small><input class="input" data-f="slug" dir="ltr" maxlength="40" value="' + v("slug") + '"></label></div>' +
+    '<div class="row"><label>المدينة<select class="input" data-f="city">' + S.cities.map(c => opt(c.name, r.city || (mz(MID) || {}).city)).join("") + "</select></label>" + order + "</div>" +
+    '<p class="hint" style="margin:0">عنوان الصفحة ثابت: «مأذون أنكحة في حي ' + (v("name") || "…") + " – " + esc(r.city || (mz(MID) || {}).city || "") + '»</p>' + active;
+  if (k === "faq") f = '<label>السؤال<input class="input" data-f="q" maxlength="200" value="' + v("q") + '"></label><label>الجواب<textarea class="input" data-f="a" maxlength="1500">' + v("a") + "</textarea></label>" +
+    '<div class="row"><label>المفتاح <small>(حروف إنجليزية، اختياري)</small><input class="input" data-f="key" dir="ltr" maxlength="30" value="' + v("key") + '"></label>' + order + "</div>" + active;
+  if (k === "q") f = '<label>نص السؤال<input class="input" data-f="label" maxlength="120" value="' + v("label") + '"></label><label>التلميح <small>(اختياري)</small><input class="input" data-f="help" maxlength="200" value="' + v("help") + '"></label>' +
+    '<div class="row"><label>النوع<select class="input" data-f="type">' + Object.values(S.lists.qt).map(t => opt(t, r.type || "نص")).join("") + '</select></label><label>الخطوة<select class="input" data-f="step">' + opt("2", r.step || "2", "2: العقد والمكان") + opt("3", r.step, "3: البيانات") + "</select></label></div>" +
+    '<label>الخيارات <small>(للبطاقات والقائمة: كل خيار في سطر. للبطاقات: القيمة | العنوان | الوصف | الأيقونة)</small><textarea class="input" data-f="options" dir="auto">' + v("options") + "</textarea></label>" +
+    '<div class="row"><label>المفتاح <small>(حروف إنجليزية، مثل guests)</small><input class="input" data-f="key" dir="ltr" maxlength="30" value="' + v("key") + '"' + (r.id && !customize ? " readonly" : "") + "></label>" + order + "</div>" +
+    '<label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" data-f="required"' + (yes(r.required) ? " checked" : "") + "> إلزامي</label>" + active +
+    '<small>الأيقونات المتاحة: ' + esc(S.lists.icons.join("، ")) + "</small>";
+  if (k === "req") f = '<label>المتطلب<input class="input" data-f="text" maxlength="200" value="' + v("text") + '"></label><div class="row"><label>نوع العقد <small>(فارغ = الكل)</small><input class="input" data-f="kind" maxlength="60" value="' + v("kind") + '"></label>' + order + "</div>" + active;
+  const note = customize ? '<p class="info" style="margin:0">هذا سطر عام. سيُحفظ نسخة خاصة بك تحلّ محله في موقعك فقط.</p>' : "";
+  return note + f + '<div class="err" data-err></div><div class="acts"><button class="btn btn-soft btn-sm" type="button" data-cancel>إلغاء</button><button class="btn btn-primary btn-sm" type="button" data-save>حفظ</button></div>';
+}
+/* هل صفحة الحي منشورة؟ (تُفحص من الموقع نفسه، فلا تحتاج الخادم) */
+function checkLive(){
+  $$("[data-live]").forEach(async el => {
+    try { const r = await fetch(el.dataset.live + "?c=" + Date.now(), { method: "HEAD", cache: "no-store" });
+      el.textContent = r.ok ? "منشورة ✓" : "قيد النشر…"; el.classList.toggle("gen", !r.ok); }
+    catch (e) { el.remove(); }
+  });
+}
+async function refreshSite(btn){
+  const r = await rpc("api_refreshSite", TOK);
+  if (!r.ok){ toast(r.error); return; }
+  toast(r.auto >= 0 ? "ستُنشر صفحات الأحياء خلال 5 إلى 10 دقائق" : "البناء التلقائي لم يعمل بعد: انشر بأمر npm run publish"); await load();
+}
+function bContent(){
+  $$("[data-sub]").forEach(b => b.onclick = () => { CSUB = b.dataset.sub; render(); });
+  bindCopy(); checkLive();
+  const sr = $("#siteRefresh"); if (sr) sr.onclick = () => busy(sr, () => refreshSite(sr));
+  $$("[data-edit]").forEach(b => b.onclick = () => {
+    const k = b.dataset.edit, id = b.dataset.id, src = { dist: S.districts, faq: S.faq, q: S.questions, req: S.reqs }[k];
+    const r = id ? src.find(x => x.id === id) : null, customize = r && !canEdit(r);
+    $$(".ed").forEach(e => { e.classList.add("hidden"); e.classList.remove("open"); e.innerHTML = ""; });
+    const box = $("#ed-" + (id || "new")); box.innerHTML = formFor(k, r, customize); box.classList.remove("hidden"); box.classList.add("open");
+    box.querySelector("input,textarea").focus();
+    box.querySelector("[data-cancel]").onclick = () => { box.classList.add("hidden"); box.classList.remove("open"); box.innerHTML = ""; };
+    const save = box.querySelector("[data-save]");
+    save.onclick = () => busy(save, async () => {
+      const d = { maazoonId: MID };
+      if (r && !customize) d.id = r.id;
+      box.querySelectorAll("[data-f]").forEach(el => { d[el.dataset.f] = el.type === "checkbox" ? el.checked : el.value; });
+      if (k !== "dist" && !S.me.owner) d.maazoonId = S.me.mid;
+      if (k !== "dist" && S.me.owner && r && !customize) d.maazoonId = r.maazoonId;
+      const fn = k === "dist" ? ["api_saveDistrict", d] : ["api_saveContent", { faq: "FAQ", q: "Q", req: "REQ" }[k], d];
+      const res = await rpc(fn[0], TOK, ...fn.slice(1));
+      if (!res.ok){ box.querySelector("[data-err]").textContent = res.error; return; }
+      toast("تم الحفظ"); await load();
+    });
+  });
+}
+
+/* ───── البيانات (ملف المأذون) ───── */
+const PF = [
+  ["shortName", "الاسم المختصر (يظهر في رأس الموقع)"], ["tagline", "الوصف القصير"], ["phone", "الجوال للاتصال"], ["whatsapp", "رقم واتساب"],
+  ["email", "البريد (للتنبيه الاحتياطي)"], ["facts", "سطور التعريف تحت الاسم (كل سطر وحده)", "area"],
+  ["slug", "رمز الرابط (حروف إنجليزية صغيرة وأرقام وشرطة، مثل abdulkarim)"],
+  ["prayers", "الصلوات المتاحة للعقد (مثل: العصر، المغرب، العشاء)"], ["prayerOffset", "أول موعد بعد الأذان بـ (دقيقة)"],
+  ["slotGap", "المسافة بين الأوقات", "gap"], ["ishaLast", "آخر وقت بعد العشاء", "isha"], ["perSlot", "عدد الحجوزات المسموح في كل وقت"],
+  ["beforeNext", "آخر موعد قبل الصلاة التالية بـ (دقيقة)"],
+  ["bookWindow", "مدة الحجز المتاحة للعملاء", "window"], ["minNotice", "أقل مهلة قبل الموعد (ساعة)"], ["offDays", "أيام الإجازة (مثل: الجمعة)"],
+  ["colorPrimary", "اللون الأساسي", "color"], ["colorDeep", "اللون الداكن", "color"], ["colorAccent", "اللون الذهبي", "color"], ["colorPaper", "لون الخلفية", "color"],
+  ["logoUrl", "رابط الشعار (صورة PNG شفافة، يبدأ بـ https)"]
+];
+const PF_OWNER = [["name", "الاسم الكامل"], ["title", "اللقب"], ["license", "رقم الرخصة"], ["city", "المدينة", "city"], ["status", "حالة الموقع", "status"], ["identityRef", "المعرّف في نظام الهويات (لاحقاً)"]];
+function field(f, m){
+  const v = esc(m[f[0]] || ""), id = "pf_" + f[0];
+  if (f[2] === "area") return '<label>' + f[1] + '<textarea class="input" id="' + id + '" data-p="' + f[0] + '">' + v + "</textarea></label>";
+  if (f[2] === "city") return "<label>" + f[1] + '<select class="input" data-p="city">' + S.cities.map(c => opt(c.name, m.city)).join("") + "</select></label>";
+  if (f[2] === "status") return "<label>" + f[1] + '<select class="input" data-p="status">' + Object.values(S.lists.ms).map(s => opt(s, m.status)).join("") + "</select></label>";
+  if (f[2] === "window"){
+    const cur = m.bookWindow || "طوال العام", W = [["طوال العام", "طوال العام"], ["7", "أسبوع"], ["14", "أسبوعان"], ["21", "ثلاثة أسابيع"], ["30", "شهر"], ["60", "شهران"], ["90", "ثلاثة أشهر"], ["180", "ستة أشهر"]];
+    if (!W.some(w => w[0] === cur)) W.push([cur, cur + " يوماً"]);
+    return "<label>" + f[1] + ' <small>(لا تظهر للعملاء الأيام بعدها)</small><select class="input" data-p="bookWindow">' + W.map(w => opt(w[0], cur, w[1])).join("") + "</select></label>";
+  }
+  if (f[2] === "gap"){
+    const cur = m.slotGap || "30", G = [["30", "نصف ساعة"], ["60", "ساعة"]];
+    if (!G.some(g => g[0] === cur)) G.push([cur, cur + " دقيقة"]);
+    return "<label>" + f[1] + ' <small>(مثل 8:00، 8:30، 9:00)</small><select class="input" data-p="slotGap">' + G.map(g => opt(g[0], cur, g[1])).join("") + "</select></label>";
+  }
+  if (f[2] === "isha"){
+    const cur = m.ishaLast || "22:30", H = [];
+    for (let x = 20 * 60; x <= 23 * 60 + 30; x += 30) H.push(pad(Math.floor(x / 60)) + ":" + pad(x % 60));
+    if (!H.includes(cur)) H.push(cur);
+    return "<label>" + f[1] + ' <small>(آخر موعد يظهر للعملاء)</small><select class="input" data-p="ishaLast">' + H.map(h => opt(h, cur, fmtTime(h))).join("") + "</select></label>";
+  }
+  if (f[2] === "color") return "<label>" + f[1] + ' <span class="swatch" style="background:' + (/^#[0-9a-fA-F]{6}$/.test(m[f[0]]) ? m[f[0]] : "transparent") + '"></span><input class="input" data-p="' + f[0] + '" dir="ltr" value="' + v + '" placeholder="#10553E"></label>';
+  return "<label>" + f[1] + '<input class="input" data-p="' + f[0] + '" value="' + v + '"' + (/slug|phone|whatsapp|email|prayerOffset|perPrayer|perSlot|beforeNext|days|min|logo|license/.test(f[0]) ? ' dir="ltr"' : "") + "></label>";
+}
+function vProfile(){
+  const m = mz(MID); if (!m) return '<div class="empty">لا يوجد مأذون.</div>';
+  const fields = (S.me.owner ? PF_OWNER : []).concat(PF);
+  return mazPicker() + '<h2 class="adm-h">' + esc(m.shortName || m.name) + "</h2>" +
+    '<div class="linkbox" style="margin-bottom:16px"><code>' + esc(m.link) + '</code><button class="btn btn-soft btn-sm" type="button" data-copy="' + esc(m.link) + '">نسخ الرابط</button><a class="btn btn-soft btn-sm" target="_blank" rel="noopener" href="' + esc(m.link) + '">فتح</a></div>' +
+    '<div class="panel"><h3>البيانات والدوام والألوان</h3><div class="form-grid">' + fields.map(f => field(f, m)).join("") + '</div><div class="err" id="pfErr"></div><p style="margin:14px 0 0"><button class="btn btn-primary" type="button" id="pfSave">حفظ البيانات</button></p>' +
+    (S.me.owner ? "" : '<p class="hint">الاسم الكامل ورقم الرخصة والمدينة يعدّلها مالك المنصة.</p>') + "</div>" +
+    '<div class="panel sect"><h3>تنبيهات تيليجرام</h3>' + (S.tg.configured
+      ? (m.tgLinked ? '<p>✓ مربوط. تصل الحجوزات الجديدة إلى تيليجرام فوراً.</p><p><button class="btn btn-soft btn-sm" type="button" id="tgTest">أرسل رسالة تجربة</button> <button class="btn btn-soft btn-sm" type="button" id="tgLink">إعادة الربط</button></p>'
+        : '<p>اضغط «اربط تيليجرام»، ثم في تيليجرام اضغط «ابدأ» (Start)، ثم ارجع هنا واضغط «تحقّق».</p><p><button class="btn btn-primary btn-sm" type="button" id="tgLink">اربط تيليجرام</button></p>') +
+      '<div id="tgStep" class="hidden"><p class="info" id="tgInfo"></p><button class="btn btn-primary btn-sm" type="button" id="tgCheck">تحقّق</button></div>'
+      : '<p style="color:var(--muted)">لم يُفعَّل بوت تيليجرام بعد' + (S.me.owner ? '، فعّله من تبويب «الإعدادات».' : '. تواصل مع مالك المنصة.') + "</p>") + "</div>" +
+    '<div class="panel sect"><h3>تغيير رمزي السري</h3><div class="form-grid"><label>الرمز الحالي<input class="input" type="password" id="ccOld" dir="ltr" autocomplete="current-password"></label><label>الرمز الجديد <small>(8 خانات على الأقل)</small><input class="input" type="password" id="ccNew" dir="ltr" autocomplete="new-password"></label></div>' +
+    '<p style="margin:12px 0 0"><button class="btn btn-soft btn-sm" type="button" id="ccSave">غيّر الرمز</button></p></div>';
+}
+function bProfile(){
+  bindCopy();
+  const s = $("#pfSave"); if (!s) return;
+  s.onclick = () => busy(s, async () => {
+    const m = mz(MID), patch = {}; $$("[data-p]").forEach(el => { if (el.value !== (m[el.dataset.p] || "")) patch[el.dataset.p] = el.value; });
+    if (!Object.keys(patch).length){ toast("لا توجد تغييرات"); return; }
+    if ("slug" in patch && !confirm("تغيير رمز الرابط يجعل الرابط القديم لا يعمل، ويجب إرسال الرابط الجديد لمن عنده القديم. متابعة؟")) return;
+    const r = await rpc("api_saveProfile", TOK, MID, patch);
+    if (!r.ok){ $("#pfErr").textContent = r.error; return; }
+    toast("تم الحفظ، ويظهر في الموقع خلال دقائق"); await load();
+  });
+  const link = $("#tgLink");
+  if (link) link.onclick = () => busy(link, async () => {
+    const r = await rpc("api_tg", TOK, "link", MID); if (!r.ok){ toast(r.error); return; }
+    $("#tgStep").classList.remove("hidden");
+    $("#tgInfo").innerHTML = '١) افتح هذا الرابط في جوالك: <a target="_blank" rel="noopener" href="' + esc(r.url) + '">' + esc(r.url) + "</a><br>٢) اضغط «ابدأ» (Start).<br>٣) ارجع هنا واضغط «تحقّق».";
+    window.open(r.url, "_blank", "noopener");
+  });
+  const chk = $("#tgCheck"); if (chk) chk.onclick = () => busy(chk, async () => { if (await act("api_tg", "check", MID)) toast("تم ربط تيليجرام ✓"); });
+  const tst = $("#tgTest"); if (tst) tst.onclick = () => busy(tst, async () => { const r = await rpc("api_tg", TOK, "test", MID); toast(r.ok ? "أُرسلت رسالة التجربة" : r.error); });
+  $("#ccSave").onclick = () => busy($("#ccSave"), async () => { const r = await act("api_changeCode", $("#ccOld").value, $("#ccNew").value); if (r) toast("تم تغيير الرمز"); });
+}
+
+/* ───── الإعدادات (المالك) ───── */
+const SET_MAIN = ["autoConfirm", "msgConfirm", "msgLead"];
+function setField(s){
+  if (s.key === "autoConfirm") return "<label>" + esc(s.note) + '<select class="input" data-set="autoConfirm">' + opt("نعم", yes(s.value) ? "نعم" : "لا", "نعم، أكّد كل حجز تلقائياً") + opt("لا", yes(s.value) ? "نعم" : "لا", "لا، أؤكد كل حجز بنفسي") + "</select></label>";
+  if (/^msg/.test(s.key)) return "<label>" + esc(s.note) + '<textarea class="input" rows="6" data-set="' + esc(s.key) + '" maxlength="1000">' + esc(s.value) + "</textarea></label>";
+  return "<label>" + esc(s.note) + '<input class="input" data-set="' + esc(s.key) + '" value="' + esc(s.value) + '"' + (/Email|Updated|max|lead|retention|Version/.test(s.key) ? ' dir="ltr"' : "") + "></label>";
+}
+function vSettings(){
+  return '<h2 class="adm-h">الإعدادات</h2>' +
+    '<div class="panel"><h3>الحجز والرسائل الجاهزة</h3><div class="ed">' + S.settings.filter(s => SET_MAIN.includes(s.key)).map(setField).join("") +
+    '</div><h3 style="margin-top:20px">إعدادات المنصة</h3><div class="form-grid">' + S.settings.filter(s => !SET_MAIN.includes(s.key)).map(setField).join("") +
+    '</div><div class="err" id="setErr"></div><p style="margin:14px 0 0"><button class="btn btn-primary" type="button" id="setSave">حفظ الإعدادات</button></p></div>' +
+    '<div class="panel sect"><h3>بوت تيليجرام</h3>' + (S.tg.configured ? '<p>✓ مفعّل: <b dir="ltr">@' + esc(S.tg.bot) + "</b></p>" : '<p style="color:var(--muted)">غير مفعّل.</p>') +
+      '<label class="label" for="tgTok">الرمز (Token) من BotFather</label><input class="input" id="tgTok" dir="ltr" autocomplete="off" placeholder="123456789:AA..."><p style="margin:10px 0 0"><button class="btn btn-soft btn-sm" type="button" id="tgSave">حفظ رمز البوت</button></p>' +
+      '<p class="hint">لا يُعرض الرمز بعد حفظه. بعد الحفظ، اربط كل مأذون من تبويب «البيانات».</p></div>' +
+    '<div class="panel sect"><h3>المأذونون</h3><div class="list">' + S.maazoons.map(m => '<div class="citem"><div class="t"><b>' + esc(m.shortName || m.name) + ' <span class="tag">' + esc(m.id) + '</span> <span class="tag' + (m.status === "موقوف" ? " off" : "") + '">' + esc(m.status) + "</span></b><small>" + (m.hasCode ? "له رمز دخول" : "لا يوجد رمز دخول") + " · " + (m.tgLinked ? "تيليجرام مربوط" : "تيليجرام غير مربوط") + (m.lastLoginAt ? " · آخر دخول " + esc(m.lastLoginAt) : "") + "</small></div>" +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn btn-soft btn-sm" type="button" data-reset="' + esc(m.id) + '">رمز دخول جديد</button>' +
+      '<button class="btn btn-soft btn-sm" type="button" data-toggle="' + esc(m.id) + '">' + (m.status === "موقوف" ? "تشغيل الموقع" : "إيقاف الموقع") + "</button></div></div>").join("") + '</div><div id="newCode"></div>' +
+      '<p class="hint">إضافة مأذون جديد في المرحلة القادمة. حالياً: أضف سطراً في ورقة «المأذونون» ثم ولّد له رمزاً من هنا.</p></div>' +
+    '<div class="panel sect"><h3>صفحات الأحياء</h3><p class="hint" style="margin-top:0">تُبنى وحدها كل 5 دقائق عند إضافة حي أو مدينة أو تعديل اسم. هذا الزر احتياط فقط.</p>' +
+      (S.siteAuto >= 0 ? '<p class="info">✓ البناء التلقائي يعمل (آخر فحص قبل ' + S.siteAuto + ' دقيقة).</p>' : '<p class="info">البناء التلقائي في GitHub لم يعمل بعد. حتى يعمل: تُنشر الأحياء الجديدة بأمر npm run publish.</p>') + '<p><button class="btn btn-soft btn-sm" type="button" id="siteRefresh">تحديث صفحات الأحياء الآن</button></p></div>' +
+    '<div class="panel sect"><h3>الأمان والنسخ الاحتياطي</h3><p><button class="btn btn-soft btn-sm" type="button" id="bkNow">نسخة احتياطية الآن</button> <button class="btn btn-soft btn-sm" type="button" id="outAll">تسجيل خروج كل الأجهزة</button> <button class="btn btn-soft btn-sm" type="button" id="logBtn">عرض السجل</button></p>' +
+      (S.backups.length ? '<small style="color:var(--muted)">آخر النسخ: ' + S.backups.map(b => esc(b.at)).reverse().join("، ") + "</small>" : "") + '<div id="logBox"></div></div>';
+}
+function bSettings(){
+  $("#setSave").onclick = () => busy($("#setSave"), async () => {
+    const p = {}; $$("[data-set]").forEach(el => { const cur = S.settings.find(x => x.key === el.dataset.set); if (!cur || el.value !== cur.value) p[el.dataset.set] = el.value; });
+    if (!Object.keys(p).length){ toast("لا توجد تغييرات"); return; }
+    const r = await rpc("api_saveSettings", TOK, p); if (!r.ok){ $("#setErr").textContent = r.error; return; }
+    toast("تم الحفظ"); await load();
+  });
+  $("#tgSave").onclick = () => busy($("#tgSave"), async () => { const r = await act("api_tg", "token", $("#tgTok").value.trim()); if (r) toast("تم تفعيل البوت @" + r.bot); });
+  $$("[data-reset]").forEach(b => b.onclick = () => busy(b, async () => {
+    if (!confirm("توليد رمز جديد يلغي رمز هذا المأذون القديم. متابعة؟")) return;
+    const r = await rpc("api_resetCode", TOK, b.dataset.reset); if (!r.ok){ toast(r.error); return; }
+    $("#newCode").innerHTML = '<p class="info" style="margin-top:14px">الرمز الجديد لـ ' + esc(mzName(b.dataset.reset)) + ' (يظهر مرة واحدة، أرسله له بطريقة آمنة):</p><div class="codebox">' + esc(r.code) + "</div>";
+  }));
+  $$("[data-toggle]").forEach(b => b.onclick = () => busy(b, async () => {
+    const m = mz(b.dataset.toggle), next = m.status === "موقوف" ? "نشط" : "موقوف";
+    if (next === "موقوف" && !confirm("إيقاف الموقع يمنع الحجز فيه ويعرض للزوار «الموقع غير متاح». متابعة؟")) return;
+    if (await act("api_saveProfile", m.id, { status: next })) toast(next === "موقوف" ? "تم إيقاف الموقع" : "تم تشغيل الموقع");
+  }));
+  $("#siteRefresh").onclick = () => busy($("#siteRefresh"), () => refreshSite($("#siteRefresh")));
+  $("#bkNow").onclick = () => busy($("#bkNow"), async () => { const r = await act("api_backupNow"); if (r) toast("تمت النسخة: " + r.name); });
+  $("#outAll").onclick = () => busy($("#outAll"), async () => { if (confirm("سيُطلب الرمز من جديد على كل الأجهزة، ومنها هذا. متابعة؟")) await act("api_logoutAll"); });
+  $("#logBtn").onclick = () => busy($("#logBtn"), async () => {
+    const r = await rpc("api_log", TOK); if (!r.ok){ toast(r.error); return; }
+    $("#logBox").innerHTML = '<div style="margin-top:12px;max-height:420px;overflow:auto">' + r.rows.map(x => '<div class="logrow"><b>' + esc(x.action) + "</b> " + esc(x.ref) + " <small>— " + esc(x.user) + " · " + esc(x.at) + (x.details ? " · " + esc(x.details) : "") + "</small></div>").join("") + "</div>";
+  });
+}
+
+/* ───── التشغيل ───── */
+initTheme();
+$$("[data-theme-icon]").forEach(b => { const upd = () => { b.innerHTML = document.documentElement.getAttribute("data-theme") === "dark" ? '<svg><use href="#i-sun"/></svg>' : '<svg><use href="#i-moon"/></svg>'; }; upd(); b.onclick = () => { setTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"); upd(); }; });
+$("#remember").checked = standalone();
+if (TOK) load(true); else $("#code").focus();
+</script>
+</body>
+</html>

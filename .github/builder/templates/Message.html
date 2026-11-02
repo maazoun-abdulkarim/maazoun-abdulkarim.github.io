@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<?!= include_('Logo') ?>
+<?!= include_('Styles') ?>
+<style><?!= colors ?></style>
+</head>
+<body>
+<div class="wrap"><div class="login">
+  <span class="logo" aria-hidden="true"></span>
+  <h2 id="t"></h2>
+  <p id="x"></p>
+</div></div>
+<script>const BOOT = <?!= boot ?>;</script>
+<?!= include_('Common') ?>
+<script>
+initTheme();
+$("#t").textContent = BOOT.title;
+$("#x").textContent = BOOT.text;
+</script>
+</body>
+</html>

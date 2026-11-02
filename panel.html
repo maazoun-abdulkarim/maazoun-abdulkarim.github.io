@@ -5,7 +5,7 @@
 <title>لوحة التحكم</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'">
 <link rel="manifest" href="https://maazounabdulkarim-cloud.github.io/panel.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="https://maazounabdulkarim-cloud.github.io/icons/panel-192.png?v=01f57718">
 <link rel="apple-touch-icon" sizes="180x180" href="https://maazounabdulkarim-cloud.github.io/icons/panel-180.png?v=43365ece">
@@ -724,8 +724,9 @@ function vContent(){
   let body = "";
   if (CSUB === "dist"){
     const list = S.districts.filter(d => d.maazoonId === MID);
-    body = '<p class="hint" style="margin-top:0">لكل حي صفحة خاصة يُكتب فيها اسمه تلقائياً. الاسم اللاتيني يظهر في الرابط. صفحة الحي الجديد تعمل بعد أمر النشر.</p>' + addBtn("dist") + '<div class="list">' + list.map(d =>
-      '<div class="citem"><div class="t"><b>' + esc(d.name) + offTag(d) + "</b><small>" + esc(d.city) + " · ترتيب " + esc(d.order) + '</small>' + (d.url ? '<div class="linkbox"><code>' + esc(d.url) + '</code><button class="btn btn-soft btn-sm" type="button" data-copy="' + esc(d.url) + '">نسخ</button></div>' : "") +
+    body = '<p class="hint" style="margin-top:0">لكل حي صفحة خاصة يُكتب فيها اسمه تلقائياً. الاسم اللاتيني يظهر في الرابط. صفحة الحي الجديد أو الاسم الجديد تُنشر وحدها خلال 5 إلى 10 دقائق.</p>' +
+      '<p><button class="btn btn-soft btn-sm" type="button" id="siteRefresh">تحديث صفحات الأحياء الآن</button></p>' + addBtn("dist") + '<div class="list">' + list.map(d =>
+      '<div class="citem"><div class="t"><b>' + esc(d.name) + offTag(d) + (d.url && yes(d.active) ? ' <span class="tag" data-live="' + esc(d.url) + '"></span>' : "") + "</b><small>" + esc(d.city) + " · ترتيب " + esc(d.order) + '</small>' + (d.url ? '<div class="linkbox"><code>' + esc(d.url) + '</code><button class="btn btn-soft btn-sm" type="button" data-copy="' + esc(d.url) + '">نسخ</button></div>' : "") +
       '</div><button class="btn btn-soft btn-sm" type="button" data-edit="dist" data-id="' + esc(d.id) + '">تعديل</button></div>' + '<div class="ed hidden" id="ed-' + esc(d.id) + '"></div>').join("") + "</div>";
   } else {
     const kind = { faq: "faq", q: "questions", req: "reqs" }[CSUB], list = S[kind].filter(r => !r.maazoonId || r.maazoonId === MID).sort((a, b) => (+a.order || 999) - (+b.order || 999));
@@ -760,9 +761,23 @@ function formFor(k, r, customize){
   const note = customize ? '<p class="info" style="margin:0">هذا سطر عام. سيُحفظ نسخة خاصة بك تحلّ محله في موقعك فقط.</p>' : "";
   return note + f + '<div class="err" data-err></div><div class="acts"><button class="btn btn-soft btn-sm" type="button" data-cancel>إلغاء</button><button class="btn btn-primary btn-sm" type="button" data-save>حفظ</button></div>';
 }
+/* هل صفحة الحي منشورة؟ (تُفحص من الموقع نفسه، فلا تحتاج الخادم) */
+function checkLive(){
+  $$("[data-live]").forEach(async el => {
+    try { const r = await fetch(el.dataset.live + "?c=" + Date.now(), { method: "HEAD", cache: "no-store" });
+      el.textContent = r.ok ? "منشورة ✓" : "قيد النشر…"; el.classList.toggle("gen", !r.ok); }
+    catch (e) { el.remove(); }
+  });
+}
+async function refreshSite(btn){
+  const r = await rpc("api_refreshSite", TOK);
+  if (!r.ok){ toast(r.error); return; }
+  toast(r.auto >= 0 ? "ستُنشر صفحات الأحياء خلال 5 إلى 10 دقائق" : "البناء التلقائي لم يعمل بعد: انشر بأمر npm run publish"); await load();
+}
 function bContent(){
   $$("[data-sub]").forEach(b => b.onclick = () => { CSUB = b.dataset.sub; render(); });
-  bindCopy();
+  bindCopy(); checkLive();
+  const sr = $("#siteRefresh"); if (sr) sr.onclick = () => busy(sr, () => refreshSite(sr));
   $$("[data-edit]").forEach(b => b.onclick = () => {
     const k = b.dataset.edit, id = b.dataset.id, src = { dist: S.districts, faq: S.faq, q: S.questions, req: S.reqs }[k];
     const r = id ? src.find(x => x.id === id) : null, customize = r && !canEdit(r);
@@ -879,6 +894,8 @@ function vSettings(){
       '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn btn-soft btn-sm" type="button" data-reset="' + esc(m.id) + '">رمز دخول جديد</button>' +
       '<button class="btn btn-soft btn-sm" type="button" data-toggle="' + esc(m.id) + '">' + (m.status === "موقوف" ? "تشغيل الموقع" : "إيقاف الموقع") + "</button></div></div>").join("") + '</div><div id="newCode"></div>' +
       '<p class="hint">إضافة مأذون جديد في المرحلة القادمة. حالياً: أضف سطراً في ورقة «المأذونون» ثم ولّد له رمزاً من هنا.</p></div>' +
+    '<div class="panel sect"><h3>صفحات الأحياء</h3><p class="hint" style="margin-top:0">تُبنى وحدها كل 5 دقائق عند إضافة حي أو مدينة أو تعديل اسم. هذا الزر احتياط فقط.</p>' +
+      (S.siteAuto >= 0 ? '<p class="info">✓ البناء التلقائي يعمل (آخر فحص قبل ' + S.siteAuto + ' دقيقة).</p>' : '<p class="info">البناء التلقائي في GitHub لم يعمل بعد. حتى يعمل: تُنشر الأحياء الجديدة بأمر npm run publish.</p>') + '<p><button class="btn btn-soft btn-sm" type="button" id="siteRefresh">تحديث صفحات الأحياء الآن</button></p></div>' +
     '<div class="panel sect"><h3>الأمان والنسخ الاحتياطي</h3><p><button class="btn btn-soft btn-sm" type="button" id="bkNow">نسخة احتياطية الآن</button> <button class="btn btn-soft btn-sm" type="button" id="outAll">تسجيل خروج كل الأجهزة</button> <button class="btn btn-soft btn-sm" type="button" id="logBtn">عرض السجل</button></p>' +
       (S.backups.length ? '<small style="color:var(--muted)">آخر النسخ: ' + S.backups.map(b => esc(b.at)).reverse().join("، ") + "</small>" : "") + '<div id="logBox"></div></div>';
 }
@@ -900,6 +917,7 @@ function bSettings(){
     if (next === "موقوف" && !confirm("إيقاف الموقع يمنع الحجز فيه ويعرض للزوار «الموقع غير متاح». متابعة؟")) return;
     if (await act("api_saveProfile", m.id, { status: next })) toast(next === "موقوف" ? "تم إيقاف الموقع" : "تم تشغيل الموقع");
   }));
+  $("#siteRefresh").onclick = () => busy($("#siteRefresh"), () => refreshSite($("#siteRefresh")));
   $("#bkNow").onclick = () => busy($("#bkNow"), async () => { const r = await act("api_backupNow"); if (r) toast("تمت النسخة: " + r.name); });
   $("#outAll").onclick = () => busy($("#outAll"), async () => { if (confirm("سيُطلب الرمز من جديد على كل الأجهزة، ومنها هذا. متابعة؟")) await act("api_logoutAll"); });
   $("#logBtn").onclick = () => busy($("#logBtn"), async () => {
